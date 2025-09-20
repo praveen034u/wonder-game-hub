@@ -78,9 +78,11 @@ export interface RiddleQuestion {
   options: string[];
   correctAnswer: number;
   theme: string;
-  difficulty: 'easy' | 'medium' | 'hard';
+  difficulty: string;
   hint?: string;
 }
+
+export type Riddle = RiddleQuestion;
 
 export interface StorySegment {
   id: string;
