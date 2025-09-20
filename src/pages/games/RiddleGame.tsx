@@ -3,11 +3,23 @@ import { useNavigate, useSearchParams, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { Input } from "@/components/ui/input";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useProgress } from "@/contexts/ProgressContext";
 import { useToast } from "@/hooks/use-toast";
 import riddlesData from "@/config/riddles.json";
 import type { Riddle, GameResult } from "@/types";
+
+type Player = {
+  id: string;
+  name: string;
+  avatar: string;
+  score: number;
+  isAI?: boolean;
+};
+
+type GamePhase = 'setup' | 'countdown' | 'playing' | 'scoreboard' | 'complete';
 
 const RiddleGame = () => {
   const navigate = useNavigate();
@@ -35,22 +47,81 @@ const RiddleGame = () => {
     );
   }
   
+  const [gamePhase, setGamePhase] = useState<GamePhase>('setup');
+  const [playerName, setPlayerName] = useState(activeProfile?.name || '');
+  const [selectedCategory, setSelectedCategory] = useState<string>('Zoo Animals');
+  const [players, setPlayers] = useState<Player[]>([]);
   const [currentRiddleIndex, setCurrentRiddleIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [showFeedback, setShowFeedback] = useState(false);
-  const [score, setScore] = useState({ correct: 0, total: 0 });
-  const [gameComplete, setGameComplete] = useState(false);
+  const [countdown, setCountdown] = useState(3);
+  const [showScoreboard, setShowScoreboard] = useState(false);
 
-  // Flatten riddles from all categories and filter by difficulty
-  const allRiddles: Riddle[] = [];
-  Object.values(riddlesData).forEach(category => {
-    if (category[difficulty as keyof typeof category]) {
-      allRiddles.push(...category[difficulty as keyof typeof category]);
+  // Get riddles for selected category and difficulty
+  const getCategoryRiddles = (category: string) => {
+    const categoryData = riddlesData[category as keyof typeof riddlesData];
+    if (categoryData && categoryData[difficulty as keyof typeof categoryData]) {
+      return categoryData[difficulty as keyof typeof categoryData] as Riddle[];
     }
-  });
+    return [];
+  };
   
-  const gameRiddles = allRiddles;
+  const gameRiddles = getCategoryRiddles(selectedCategory);
   const currentRiddle = gameRiddles[currentRiddleIndex];
+
+  const startGame = () => {
+    const newPlayers: Player[] = [
+      {
+        id: activeProfile?.id || 'player1',
+        name: playerName,
+        avatar: activeProfile?.avatar || '👤',
+        score: 0
+      },
+      {
+        id: 'ai1',
+        name: 'Vini',
+        avatar: '🐵',
+        score: 0,
+        isAI: true
+      },
+      {
+        id: 'ai2', 
+        name: 'Mimi',
+        avatar: '🐘',
+        score: 0,
+        isAI: true
+      }
+    ];
+    
+    setPlayers(newPlayers);
+    setGamePhase('countdown');
+    
+    // Countdown timer
+    let count = 3;
+    const timer = setInterval(() => {
+      count--;
+      setCountdown(count);
+      if (count === 0) {
+        clearInterval(timer);
+        setGamePhase('playing');
+      }
+    }, 1000);
+  };
+
+  const simulateAIAnswers = () => {
+    // Simulate AI players answering with random delays
+    const aiPlayers = players.filter(p => p.isAI);
+    aiPlayers.forEach((aiPlayer, index) => {
+      setTimeout(() => {
+        const isCorrect = Math.random() > 0.4; // 60% chance of correct answer
+        if (isCorrect) {
+          setPlayers(prev => prev.map(p => 
+            p.id === aiPlayer.id ? { ...p, score: p.score + 1 } : p
+          ));
+        }
+      }, (index + 1) * 1500 + Math.random() * 1000);
+    });
+  };
 
   const handleAnswerSelect = (answer: string) => {
     if (showFeedback) return;
@@ -60,11 +131,16 @@ const RiddleGame = () => {
     
     const correctAnswerText = currentRiddle.options[currentRiddle.correctAnswer];
     const isCorrect = answer === correctAnswerText;
-    const newScore = {
-      correct: score.correct + (isCorrect ? 1 : 0),
-      total: score.total + 1
-    };
-    setScore(newScore);
+    
+    // Update player score
+    if (isCorrect) {
+      setPlayers(prev => prev.map(p => 
+        p.id === (activeProfile?.id || 'player1') ? { ...p, score: p.score + 1 } : p
+      ));
+    }
+
+    // Simulate AI answers
+    simulateAIAnswers();
 
     if (isCorrect) {
       toast({
@@ -79,23 +155,44 @@ const RiddleGame = () => {
       });
     }
 
-    // Auto-advance after 2 seconds
+    // Show scoreboard after each question
     setTimeout(() => {
-      if (currentRiddleIndex < gameRiddles.length - 1) {
-        setCurrentRiddleIndex(prev => prev + 1);
-        setSelectedAnswer(null);
-        setShowFeedback(false);
-      } else {
-        finishGame(newScore);
-      }
+      setShowScoreboard(true);
     }, 2000);
   };
 
-  const finishGame = (finalScore: typeof score) => {
-    setGameComplete(true);
+  const nextQuestion = () => {
+    setShowScoreboard(false);
+    if (currentRiddleIndex < gameRiddles.length - 1) {
+      setCurrentRiddleIndex(prev => prev + 1);
+      setSelectedAnswer(null);
+      setShowFeedback(false);
+      setCountdown(3);
+      setGamePhase('countdown');
+      
+      // Countdown for next question
+      let count = 3;
+      const timer = setInterval(() => {
+        count--;
+        setCountdown(count);
+        if (count === 0) {
+          clearInterval(timer);
+          setGamePhase('playing');
+        }
+      }, 1000);
+    } else {
+      finishGame();
+    }
+  };
+
+  const finishGame = () => {
+    setGamePhase('complete');
+    
+    const playerScore = players.find(p => p.id === (activeProfile?.id || 'player1'))?.score || 0;
+    const totalQuestions = currentRiddleIndex + 1;
     
     // Calculate stars (1-3 based on percentage)
-    const percentage = finalScore.correct / finalScore.total;
+    const percentage = playerScore / totalQuestions;
     let starsEarned = 1;
     if (percentage >= 0.8) starsEarned = 3;
     else if (percentage >= 0.6) starsEarned = 2;
@@ -104,8 +201,8 @@ const RiddleGame = () => {
       gameId: 'riddle',
       profileId: activeProfile?.id || '',
       difficulty,
-      correct: finalScore.correct,
-      total: finalScore.total,
+      correct: playerScore,
+      total: totalQuestions,
       starsEarned,
       endedAt: new Date().toISOString()
     };
@@ -114,55 +211,227 @@ const RiddleGame = () => {
     
     toast({
       title: `Game Complete! ${starsEarned} ⭐`,
-      description: `You got ${finalScore.correct}/${finalScore.total} correct!`,
+      description: `You got ${playerScore}/${totalQuestions} correct!`,
     });
   };
 
   const handlePlayAgain = () => {
+    setGamePhase('setup');
     setCurrentRiddleIndex(0);
     setSelectedAnswer(null);
     setShowFeedback(false);
-    setScore({ correct: 0, total: 0 });
-    setGameComplete(false);
+    setShowScoreboard(false);
+    setPlayers([]);
   };
 
-  if (!currentRiddle && !gameComplete) {
+
+  // Setup Phase
+  if (gamePhase === 'setup') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/20 to-secondary/20">
-        <Card className="max-w-md mx-auto">
-          <CardContent className="text-center py-8">
-            <p className="text-lg">No riddles available for {difficulty} difficulty.</p>
-            <Button onClick={() => navigate('/games')} className="mt-4">
-              Back to Games
-            </Button>
+      <div className="min-h-screen bg-gradient-to-br from-pink-500 to-purple-600 p-4">
+        <div className="max-w-md mx-auto">
+          <Card className="bg-pink-100/90 shadow-xl">
+            <CardHeader className="text-center">
+              <CardTitle className="text-2xl font-fredoka text-pink-700">
+                Let's Play Riddle with my AI buddy or Friends
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-4">
+                <div className="flex items-center space-x-3">
+                  <div className="text-2xl">🎯</div>
+                  <div>
+                    <label className="block text-sm font-medium text-pink-700 mb-1">
+                      What's name you want to use for Role
+                    </label>
+                    <Input
+                      value={playerName}
+                      onChange={(e) => setPlayerName(e.target.value)}
+                      placeholder="Enter your name"
+                      className="bg-white"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-3">
+                  <div className="text-2xl">🧸</div>
+                  <div className="flex-1">
+                    <p className="text-sm text-pink-700 mb-2">Category: {selectedCategory}</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {Object.keys(riddlesData).map(category => (
+                        <Button
+                          key={category}
+                          onClick={() => setSelectedCategory(category)}
+                          variant={selectedCategory === category ? "default" : "outline"}
+                          size="sm"
+                          className="text-xs"
+                        >
+                          {category}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-3">
+                  <div className="text-2xl">👥</div>
+                  <div>
+                    <p className="text-sm text-pink-700 mb-2">
+                      Do you want to invite your friends? I can add invites if one is online.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-3">
+                  <div className="text-2xl">🧸</div>
+                  <p className="text-sm text-pink-700">Add Vini and Mimi</p>
+                </div>
+
+                <div className="flex items-center space-x-3">
+                  <div className="text-2xl">🎮</div>
+                  <p className="text-sm text-pink-700">
+                    Ok, let me add her and start the game. Hope you don't mind me playing with you and your friend
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <Button 
+                  onClick={startGame}
+                  disabled={!playerName.trim() || gameRiddles.length === 0}
+                  className="w-full bg-pink-600 hover:bg-pink-700 text-white"
+                  size="lg"
+                >
+                  Start Game 🚀
+                </Button>
+                
+                <Button 
+                  onClick={() => navigate('/stories')}
+                  variant="outline"
+                  className="w-full border-pink-300"
+                  size="lg"
+                >
+                  Switch Story Mode
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  // Countdown Phase
+  if (gamePhase === 'countdown') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-pink-500 to-purple-600 p-4 flex items-center justify-center">
+        <Card className="max-w-md mx-auto bg-pink-100/90">
+          <CardContent className="text-center py-16">
+            <h2 className="text-2xl font-fredoka text-pink-700 mb-4">
+              Riddle For {selectedCategory}
+            </h2>
+            <div className="flex justify-center space-x-2 mb-6">
+              <span className="text-3xl">🐄</span>
+              <span className="text-3xl">🐵</span>
+              <span className="text-3xl">🐘</span>
+            </div>
+            <p className="text-lg text-pink-700 mb-4">Here is the 1st riddle 3,2,1 Go...</p>
+            <div className="text-6xl font-bold text-pink-600">
+              {countdown > 0 ? countdown : "GO!"}
+            </div>
           </CardContent>
         </Card>
       </div>
     );
   }
 
-  if (gameComplete) {
-    const percentage = (score.correct / score.total) * 100;
+  // Scoreboard Phase
+  if (showScoreboard) {
+    const sortedPlayers = [...players].sort((a, b) => b.score - a.score);
+    
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-pink-500 to-purple-600 p-4">
+        <div className="max-w-md mx-auto">
+          <Card className="bg-pink-100/90 shadow-xl">
+            <CardHeader className="text-center">
+              <CardTitle className="text-2xl font-fredoka text-pink-700">
+                Riddle For {selectedCategory}
+              </CardTitle>
+              <div className="flex justify-center space-x-2 mt-2">
+                <span className="text-2xl">🐄</span>
+                <span className="text-2xl">🐵</span>
+                <span className="text-2xl">🐘</span>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="text-center">
+                <h3 className="text-lg font-medium text-pink-700 mb-4">Score Board</h3>
+                <div className="space-y-3">
+                  {sortedPlayers.map((player, index) => (
+                    <div key={player.id} className="flex items-center justify-between bg-white/50 rounded-lg p-3">
+                      <div className="flex items-center space-x-3">
+                        <Avatar className="w-8 h-8">
+                          <AvatarFallback className="text-lg">{player.avatar}</AvatarFallback>
+                        </Avatar>
+                        <span className="font-medium text-pink-700">{player.name}</span>
+                      </div>
+                      <span className="text-xl font-bold text-pink-600">{player.score}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              
+              <Button 
+                onClick={nextQuestion}
+                className="w-full bg-pink-600 hover:bg-pink-700 text-white mt-6"
+                size="lg"
+              >
+                {currentRiddleIndex < gameRiddles.length - 1 ? "Next Question →" : "Finish Game 🏆"}
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  // Game Complete Phase
+  if (gamePhase === 'complete') {
+    const playerScore = players.find(p => p.id === (activeProfile?.id || 'player1'))?.score || 0;
+    const totalQuestions = currentRiddleIndex + 1;
+    const percentage = (playerScore / totalQuestions) * 100;
     let starsEarned = 1;
     if (percentage >= 80) starsEarned = 3;
     else if (percentage >= 60) starsEarned = 2;
 
+    const sortedPlayers = [...players].sort((a, b) => b.score - a.score);
+
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/20 to-secondary/20 p-4">
-        <Card className="max-w-lg mx-auto bg-white/95 shadow-xl">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-pink-500 to-purple-600 p-4">
+        <Card className="max-w-lg mx-auto bg-pink-100/95 shadow-xl">
           <CardHeader className="text-center">
             <div className="text-6xl mb-4">🎉</div>
-            <CardTitle className="text-2xl font-fredoka text-primary">
-              Great Job, {activeProfile?.name}!
+            <CardTitle className="text-2xl font-fredoka text-pink-700">
+              Great Job, {playerName}!
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6 text-center">
-            <div className="space-y-2">
-              <p className="text-lg">Your Score:</p>
-              <p className="text-3xl font-bold text-primary">
-                {score.correct}/{score.total}
-              </p>
-              <div className="flex justify-center">
+            <div className="space-y-4">
+              <p className="text-lg text-pink-700">Final Scoreboard:</p>
+              {sortedPlayers.map((player, index) => (
+                <div key={player.id} className="flex items-center justify-between bg-white/50 rounded-lg p-3">
+                  <div className="flex items-center space-x-3">
+                    <div className="text-xl">{index === 0 ? '👑' : `${index + 1}.`}</div>
+                    <Avatar className="w-8 h-8">
+                      <AvatarFallback className="text-lg">{player.avatar}</AvatarFallback>
+                    </Avatar>
+                    <span className="font-medium text-pink-700">{player.name}</span>
+                  </div>
+                  <span className="text-xl font-bold text-pink-600">{player.score}</span>
+                </div>
+              ))}
+              
+              <div className="flex justify-center mt-4">
                 {Array.from({ length: 3 }, (_, i) => (
                   <span key={i} className={`text-2xl ${i < starsEarned ? 'text-yellow-500' : 'text-gray-300'}`}>
                     ⭐
@@ -174,7 +443,7 @@ const RiddleGame = () => {
             <div className="space-y-3">
               <Button 
                 onClick={handlePlayAgain}
-                className="w-full bg-primary hover:bg-primary/90 text-white"
+                className="w-full bg-pink-600 hover:bg-pink-700 text-white"
                 size="lg"
               >
                 Play Again 🔄
@@ -182,7 +451,7 @@ const RiddleGame = () => {
               <Button 
                 onClick={() => navigate('/games')}
                 variant="outline"
-                className="w-full"
+                className="w-full border-pink-300"
                 size="lg"
               >
                 Back to Games
@@ -190,7 +459,7 @@ const RiddleGame = () => {
               <Button 
                 onClick={() => navigate('/progress')}
                 variant="outline"
-                className="w-full"
+                className="w-full border-pink-300"
                 size="lg"
               >
                 View Progress ⭐
@@ -202,91 +471,92 @@ const RiddleGame = () => {
     );
   }
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/20 to-secondary/20 p-4">
-      <div className="max-w-2xl mx-auto">
-        {/* Header */}
-        <div className="text-center mb-6">
-          <h1 className="text-3xl font-fredoka font-bold text-primary mb-2">
-            🧩 Riddle Time!
-          </h1>
-          <p className="text-lg text-muted-foreground">
-            Question {currentRiddleIndex + 1} of {gameRiddles.length}
-          </p>
-          <Progress 
-            value={((currentRiddleIndex + 1) / gameRiddles.length) * 100}
-            className="w-full mt-2"
-          />
-        </div>
-
-        {/* Score */}
-        <div className="text-center mb-6">
-          <p className="text-lg">
-            Score: <span className="font-bold text-primary">{score.correct}/{score.total}</span>
-          </p>
-        </div>
-
-        {/* Riddle Card */}
-        <Card className="bg-white/95 shadow-xl mb-6">
-          <CardHeader className="text-center">
-            <div className="text-4xl mb-2">🧩</div>
-            <CardTitle className="text-xl font-fredoka text-primary">
-              {currentRiddle.question}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {currentRiddle.options.map((option, index) => (
-              <Button
-                key={index}
-                onClick={() => handleAnswerSelect(option)}
-                disabled={showFeedback}
-                variant={
-                  showFeedback 
-                    ? option === currentRiddle.options[currentRiddle.correctAnswer]
-                      ? "default"
-                      : option === selectedAnswer
-                        ? "destructive"
-                        : "outline"
-                    : "outline"
-                }
-                className={`w-full text-left justify-start p-4 h-auto ${
-                  showFeedback && option === currentRiddle.options[currentRiddle.correctAnswer]
-                    ? "bg-green-500 hover:bg-green-500 text-white border-green-500"
-                    : showFeedback && option === selectedAnswer && option !== currentRiddle.options[currentRiddle.correctAnswer]
-                      ? "bg-red-500 hover:bg-red-500 text-white border-red-500"
-                      : ""
-                }`}
-                size="lg"
-              >
-                <span className="font-medium mr-3">{String.fromCharCode(65 + index)}.</span>
-                {option}
-              </Button>
-            ))}
+  if (!currentRiddle) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-pink-500 to-purple-600">
+        <Card className="max-w-md mx-auto bg-pink-100/90">
+          <CardContent className="text-center py-8">
+            <p className="text-lg text-pink-700">No riddles available for {selectedCategory} - {difficulty}.</p>
+            <Button onClick={() => navigate('/games')} className="mt-4 bg-pink-600 hover:bg-pink-700 text-white">
+              Back to Games
+            </Button>
           </CardContent>
         </Card>
+      </div>
+    );
+  }
 
-        {/* Navigation */}
-        <div className="flex justify-between">
-          <Button
-            onClick={() => navigate('/games')}
-            variant="outline"
-          >
-            ← Back to Games
-          </Button>
+  // Playing Phase  
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-pink-500 to-purple-600 p-4">
+      <div className="max-w-md mx-auto">
+        <Card className="bg-pink-100/90 shadow-xl">
+          <CardHeader className="text-center">
+            <CardTitle className="text-xl font-fredoka text-pink-700">
+              Riddle For {selectedCategory}
+            </CardTitle>
+            <div className="flex justify-center space-x-2 mt-2">
+              <span className="text-2xl">🐄</span>
+              <span className="text-2xl">🐵</span>
+              <span className="text-2xl">🐘</span>
+            </div>
+            <Progress 
+              value={((currentRiddleIndex + 1) / gameRiddles.length) * 100}
+              className="w-full mt-4"
+            />
+            <p className="text-sm text-pink-600 mt-2">
+              Question {currentRiddleIndex + 1} of {gameRiddles.length}
+            </p>
+          </CardHeader>
           
-          {showFeedback && currentRiddleIndex < gameRiddles.length - 1 && (
-            <Button
-              onClick={() => {
-                setCurrentRiddleIndex(prev => prev + 1);
-                setSelectedAnswer(null);
-                setShowFeedback(false);
-              }}
-              className="bg-primary hover:bg-primary/90 text-white"
-            >
-              Next Question →
-            </Button>
-          )}
-        </div>
+          <CardContent className="space-y-4">
+            <div className="text-center bg-white/50 rounded-lg p-4">
+              <h3 className="text-lg font-medium text-pink-700 mb-3">
+                {currentRiddle.question}
+              </h3>
+            </div>
+
+            <div className="space-y-3">
+              {currentRiddle.options.map((option, index) => (
+                <Button
+                  key={index}
+                  onClick={() => handleAnswerSelect(option)}
+                  disabled={showFeedback}
+                  variant={
+                    showFeedback 
+                      ? option === currentRiddle.options[currentRiddle.correctAnswer]
+                        ? "default"
+                        : option === selectedAnswer
+                          ? "destructive"
+                          : "outline"
+                      : "outline"
+                  }
+                  className={`w-full text-left justify-start p-4 h-auto ${
+                    showFeedback && option === currentRiddle.options[currentRiddle.correctAnswer]
+                      ? "bg-green-500 hover:bg-green-500 text-white border-green-500"
+                      : showFeedback && option === selectedAnswer && option !== currentRiddle.options[currentRiddle.correctAnswer]
+                        ? "bg-red-500 hover:bg-red-500 text-white border-red-500"
+                        : "bg-white/70 hover:bg-white/90 text-pink-700 border-pink-300"
+                  }`}
+                  size="lg"
+                >
+                  <span className="font-medium mr-3">{String.fromCharCode(65 + index)}.</span>
+                  {option}
+                </Button>
+              ))}
+            </div>
+
+            <div className="flex justify-center mt-6">
+              <Button
+                onClick={() => navigate('/games')}
+                variant="outline"
+                className="border-pink-300 text-pink-700"
+              >
+                ← Back to Games
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
