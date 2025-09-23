@@ -13,6 +13,7 @@ import Profile from "./pages/Profile";
 import ModeSelector from "./pages/ModeSelector";
 import GameDashboard from "./pages/GameDashboard";
 import StoryDashboard from "./pages/StoryDashboard";
+import StoryViewer from "./pages/StoryViewer";
 import ProgressRewards from "./pages/ProgressRewards";
 import RiddleGame from "./pages/games/RiddleGame";
 import NotFound from "./pages/NotFound";
@@ -54,6 +55,12 @@ const App = () => (
               <Route path="/stories" element={
                 <ProtectedRoute requireProfile>
                   <StoryDashboard />
+                </ProtectedRoute>
+              } />
+              
+              <Route path="/story-viewer" element={
+                <ProtectedRoute requireProfile>
+                  <StoryViewer />
                 </ProtectedRoute>
               } />
               
