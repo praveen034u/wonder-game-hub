@@ -7,6 +7,8 @@ const STORAGE_KEYS = {
   PROFILES: 'storyteller_profiles',
   PROGRESS: 'storyteller_progress',
   GAME_RESULTS: 'storyteller_game_results',
+  PARENT_PROFILE: 'storyteller_parent_profile',
+  PARENT_CONTROL: 'storyteller_parent_control',
 } as const;
 
 export class StorageService {

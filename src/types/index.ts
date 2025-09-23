@@ -4,6 +4,8 @@ export interface User {
   id: string;
   email: string;
   createdAt: string;
+  hasCompletedProfile?: boolean;
+  hasParentProfile?: boolean;
 }
 
 export interface ChildProfile {
@@ -12,6 +14,34 @@ export interface ChildProfile {
   name: string;
   ageGroup: 'toddler' | 'preschool' | 'elementary' | 'tween';
   avatar: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ParentProfile {
+  id: string;
+  userId: string;
+  name: string;
+  email: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ParentControl {
+  id: string;
+  userId: string;
+  childProfileId: string;
+  screenTime: {
+    dailyLimitMinutes: number;
+    startTime: string; // "09:00"
+    endTime: string; // "20:00"
+    enabled: boolean;
+  };
+  bedTime: {
+    time: string; // "21:00"
+    enabled: boolean;
+    warningMinutes: number; // minutes before bedtime to show warning
+  };
   createdAt: string;
   updatedAt: string;
 }
@@ -100,6 +130,8 @@ export interface StorySegment {
 export interface AuthState {
   user: User | null;
   activeProfile: ChildProfile | null;
+  parentProfile: ParentProfile | null;
+  parentControl: ParentControl | null;
   isLoading: boolean;
   isAuthenticated: boolean;
 }

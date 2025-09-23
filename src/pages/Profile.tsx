@@ -50,8 +50,15 @@ const Profile = () => {
     setActiveProfile(profile);
     setIsEditing(false);
     
+    // Mark user as having completed profile setup
+    if (!activeProfile && user) {
+      const updatedUser = { ...user, hasCompletedProfile: true };
+      StorageService.saveUserData(updatedUser);
+    }
+    
     if (!activeProfile) {
-      navigate('/modes');
+      // First time profile creation - redirect to parent setup
+      navigate('/parent-setup');
     }
   };
 

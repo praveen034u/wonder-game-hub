@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
-import { User, ChildProfile, AuthState } from '@/types';
+import { User, ChildProfile, ParentProfile, ParentControl, AuthState } from '@/types';
 import { authService } from '@/services/AuthService';
 import { StorageService } from '@/lib/storage';
 import { useToast } from '@/hooks/use-toast';
@@ -9,6 +9,8 @@ interface AuthContextType extends AuthState {
   signup: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   setActiveProfile: (profile: ChildProfile | null) => void;
+  setParentProfile: (profile: ParentProfile | null) => void;
+  setParentControl: (control: ParentControl | null) => void;
   refreshAuth: () => Promise<void>;
 }
 
@@ -18,6 +20,8 @@ type AuthAction =
   | { type: 'SET_LOADING'; payload: boolean }
   | { type: 'SET_USER'; payload: User | null }
   | { type: 'SET_ACTIVE_PROFILE'; payload: ChildProfile | null }
+  | { type: 'SET_PARENT_PROFILE'; payload: ParentProfile | null }
+  | { type: 'SET_PARENT_CONTROL'; payload: ParentControl | null }
   | { type: 'LOGOUT' };
 
 function authReducer(state: AuthState, action: AuthAction): AuthState {
@@ -33,10 +37,16 @@ function authReducer(state: AuthState, action: AuthAction): AuthState {
       };
     case 'SET_ACTIVE_PROFILE':
       return { ...state, activeProfile: action.payload };
+    case 'SET_PARENT_PROFILE':
+      return { ...state, parentProfile: action.payload };
+    case 'SET_PARENT_CONTROL':
+      return { ...state, parentControl: action.payload };
     case 'LOGOUT':
       return {
         user: null,
         activeProfile: null,
+        parentProfile: null,
+        parentControl: null,
         isLoading: false,
         isAuthenticated: false,
       };
@@ -48,6 +58,8 @@ function authReducer(state: AuthState, action: AuthAction): AuthState {
 const initialState: AuthState = {
   user: null,
   activeProfile: null,
+  parentProfile: null,
+  parentControl: null,
   isLoading: true,
   isAuthenticated: false,
 };
@@ -70,7 +82,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (user) {
         const activeProfile = StorageService.getActiveProfile();
+        const parentProfile = StorageService.getItem<ParentProfile>('PARENT_PROFILE');
+        const parentControl = StorageService.getItem<ParentControl>('PARENT_CONTROL');
+        
         dispatch({ type: 'SET_ACTIVE_PROFILE', payload: activeProfile });
+        dispatch({ type: 'SET_PARENT_PROFILE', payload: parentProfile });
+        dispatch({ type: 'SET_PARENT_CONTROL', payload: parentControl });
       }
     } catch (error) {
       console.error('Failed to initialize auth:', error);
@@ -146,6 +163,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     StorageService.saveActiveProfile(profile);
   };
 
+  const setParentProfile = (profile: ParentProfile | null) => {
+    dispatch({ type: 'SET_PARENT_PROFILE', payload: profile });
+    StorageService.setItem('PARENT_PROFILE', profile);
+  };
+
+  const setParentControl = (control: ParentControl | null) => {
+    dispatch({ type: 'SET_PARENT_CONTROL', payload: control });
+    StorageService.setItem('PARENT_CONTROL', control);
+  };
+
   const refreshAuth = async () => {
     await initializeAuth();
   };
@@ -156,6 +183,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signup,
     logout,
     setActiveProfile,
+    setParentProfile,
+    setParentControl,
     refreshAuth,
   };
 
