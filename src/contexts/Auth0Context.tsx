@@ -1,0 +1,183 @@
+import { Auth0Provider, useAuth0 } from '@auth0/auth0-react';
+import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+
+interface ParentProfile {
+  id: string;
+  auth0_user_id: string;
+  email: string;
+  name?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ChildProfile {
+  id: string;
+  parent_id: string;
+  name: string;
+  age_group: string;
+  avatar?: string;
+  voice_clone_enabled: boolean;
+  voice_clone_url?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface VoiceSubscription {
+  id: string;
+  parent_id: string;
+  stripe_subscription_id?: string;
+  stripe_customer_id?: string;
+  status: string;
+  plan_type: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface AppContextType {
+  parentProfile: ParentProfile | null;
+  childrenProfiles: ChildProfile[];
+  selectedChild: ChildProfile | null;
+  voiceSubscription: VoiceSubscription | null;
+  setSelectedChild: (child: ChildProfile | null) => void;
+  refreshProfiles: () => Promise<void>;
+  isLoadingProfiles: boolean;
+}
+
+const AppContext = createContext<AppContextType | undefined>(undefined);
+
+export const Auth0ProviderWrapper = ({ children }: { children: ReactNode }) => {
+  return (
+    <Auth0Provider
+      domain="dev-jbrriuc5vyjmiwtx.us.auth0.com"
+      clientId="eh3lkyPjejB7dngFewuGp6FSP1l6j39D"
+      authorizationParams={{
+        redirect_uri: window.location.origin,
+        audience: "https://dev-jbrriuc5vyjmiwtx.us.auth0.com/userinfo"
+      }}
+    >
+      <AppContextProvider>
+        {children}
+      </AppContextProvider>
+    </Auth0Provider>
+  );
+};
+
+export const AppContextProvider = ({ children }: { children: ReactNode }) => {
+  const { user, isAuthenticated, getAccessTokenSilently, isLoading } = useAuth0();
+  const [parentProfile, setParentProfile] = useState<ParentProfile | null>(null);
+  const [childrenProfiles, setChildrenProfiles] = useState<ChildProfile[]>([]);
+  const [selectedChild, setSelectedChild] = useState<ChildProfile | null>(null);
+  const [voiceSubscription, setVoiceSubscription] = useState<VoiceSubscription | null>(null);
+  const [isLoadingProfiles, setIsLoadingProfiles] = useState(false);
+
+  const setCurrentUser = async (auth0UserId: string) => {
+    // Set the current Auth0 user ID for RLS policies
+    await supabase.rpc('set_config', {
+      setting: 'app.current_auth0_user_id',
+      value: auth0UserId
+    });
+  };
+
+  const refreshProfiles = async () => {
+    if (!isAuthenticated || !user?.sub) return;
+    
+    setIsLoadingProfiles(true);
+    try {
+      await setCurrentUser(user.sub);
+
+      // Fetch parent profile
+      const { data: parentData, error: parentError } = await supabase
+        .from('parent_profiles')
+        .select('*')
+        .eq('auth0_user_id', user.sub)
+        .single();
+
+      if (parentError && parentError.code !== 'PGRST116') {
+        console.error('Error fetching parent profile:', parentError);
+      } else if (parentData) {
+        setParentProfile(parentData);
+
+        // Fetch children profiles
+        const { data: childrenData, error: childrenError } = await supabase
+          .from('children_profiles')
+          .select('*')
+          .eq('parent_id', parentData.id);
+
+        if (childrenError) {
+          console.error('Error fetching children profiles:', childrenError);
+        } else {
+          setChildrenProfiles(childrenData || []);
+        }
+
+        // Fetch voice subscription
+        const { data: subscriptionData, error: subscriptionError } = await supabase
+          .from('voice_subscriptions')
+          .select('*')
+          .eq('parent_id', parentData.id)
+          .single();
+
+        if (subscriptionError && subscriptionError.code !== 'PGRST116') {
+          console.error('Error fetching subscription:', subscriptionError);
+        } else if (subscriptionData) {
+          setVoiceSubscription(subscriptionData);
+        }
+      } else if (user?.email) {
+        // Create parent profile if it doesn't exist
+        const newProfile = {
+          auth0_user_id: user.sub,
+          email: user.email,
+          name: user.name || user.email
+        };
+
+        const { data: createdProfile, error: createError } = await supabase
+          .from('parent_profiles')
+          .insert(newProfile)
+          .select()
+          .single();
+
+        if (createError) {
+          console.error('Error creating parent profile:', createError);
+        } else {
+          setParentProfile(createdProfile);
+        }
+      }
+    } catch (error) {
+      console.error('Error refreshing profiles:', error);
+    } finally {
+      setIsLoadingProfiles(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isLoading && isAuthenticated && user?.sub) {
+      refreshProfiles();
+    }
+  }, [isAuthenticated, isLoading, user?.sub]);
+
+  return (
+    <AppContext.Provider value={{
+      parentProfile,
+      childrenProfiles,
+      selectedChild,
+      voiceSubscription,
+      setSelectedChild,
+      refreshProfiles,
+      isLoadingProfiles
+    }}>
+      {children}
+    </AppContext.Provider>
+  );
+};
+
+export const useAppContext = () => {
+  const context = useContext(AppContext);
+  if (context === undefined) {
+    throw new Error('useAppContext must be used within an AppContextProvider');
+  }
+  return context;
+};
+
+export const useAppAuth = () => {
+  return useAuth0();
+};
