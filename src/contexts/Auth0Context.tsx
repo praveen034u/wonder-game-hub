@@ -72,11 +72,15 @@ export const AppContextProvider = ({ children }: { children: ReactNode }) => {
   const [isLoadingProfiles, setIsLoadingProfiles] = useState(false);
 
   const setCurrentUser = async (auth0UserId: string) => {
-    // Set the current Auth0 user ID for RLS policies
-    await supabase.rpc('set_config', {
-      setting: 'app.current_auth0_user_id',
-      value: auth0UserId
-    });
+    // Set the current Auth0 user ID for RLS policies  
+    try {
+      await supabase.rpc('set_config', {
+        setting: 'app.current_auth0_user_id',
+        value: auth0UserId
+      } as any);
+    } catch (error) {
+      console.error('Error setting current user:', error);
+    }
   };
 
   const refreshProfiles = async () => {
