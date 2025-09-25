@@ -1,12 +1,12 @@
-import { useAuth0 } from '@auth0/auth0-react';
+import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { LogOut } from 'lucide-react';
 
 export const LogoutButton = () => {
-  const { logout, isLoading } = useAuth0();
+  const { logout, isLoading } = useAuth();
 
   const handleLogout = () => {
-    logout({ logoutParams: { returnTo: window.location.origin } });
+    logout();
   };
 
   return (
