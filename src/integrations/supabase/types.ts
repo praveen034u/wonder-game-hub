@@ -14,7 +14,153 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      children_profiles: {
+        Row: {
+          age_group: string
+          avatar: string | null
+          created_at: string
+          id: string
+          name: string
+          parent_id: string
+          updated_at: string
+          voice_clone_enabled: boolean | null
+          voice_clone_url: string | null
+        }
+        Insert: {
+          age_group: string
+          avatar?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          parent_id: string
+          updated_at?: string
+          voice_clone_enabled?: boolean | null
+          voice_clone_url?: string | null
+        }
+        Update: {
+          age_group?: string
+          avatar?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          parent_id?: string
+          updated_at?: string
+          voice_clone_enabled?: boolean | null
+          voice_clone_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "children_profiles_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "parent_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      generated_stories: {
+        Row: {
+          audio_url: string | null
+          child_id: string
+          content: string
+          created_at: string
+          id: string
+          title: string
+        }
+        Insert: {
+          audio_url?: string | null
+          child_id: string
+          content: string
+          created_at?: string
+          id?: string
+          title: string
+        }
+        Update: {
+          audio_url?: string | null
+          child_id?: string
+          content?: string
+          created_at?: string
+          id?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "generated_stories_child_id_fkey"
+            columns: ["child_id"]
+            isOneToOne: false
+            referencedRelation: "children_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      parent_profiles: {
+        Row: {
+          auth0_user_id: string
+          created_at: string
+          email: string
+          id: string
+          name: string | null
+          updated_at: string
+        }
+        Insert: {
+          auth0_user_id: string
+          created_at?: string
+          email: string
+          id?: string
+          name?: string | null
+          updated_at?: string
+        }
+        Update: {
+          auth0_user_id?: string
+          created_at?: string
+          email?: string
+          id?: string
+          name?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      voice_subscriptions: {
+        Row: {
+          created_at: string
+          id: string
+          parent_id: string
+          plan_type: string
+          status: string
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          parent_id: string
+          plan_type?: string
+          status?: string
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          parent_id?: string
+          plan_type?: string
+          status?: string
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "voice_subscriptions_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "parent_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
