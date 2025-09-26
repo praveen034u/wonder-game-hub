@@ -38,31 +38,40 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
 
     try {
       setIsLoading(true);
-      const { data, error } = await supabase
+      
+      // Get friendships where current child is involved
+      const { data: friendships, error } = await supabase
         .from('friends')
-        .select(`
-          *,
-          requester:children_profiles!friends_requester_id_fkey(id, name, avatar),
-          addressee:children_profiles!friends_addressee_id_fkey(id, name, avatar)
-        `)
+        .select('*')
         .or(`requester_id.eq.${selectedChild.id},addressee_id.eq.${selectedChild.id}`)
         .eq('status', 'accepted');
 
       if (error) throw error;
 
-      const friendsList = data?.map(friendship => {
-        const friend = friendship.requester_id === selectedChild.id 
-          ? friendship.addressee 
-          : friendship.requester;
+      // Get friend profiles for each friendship
+      const friendsList: Friend[] = [];
+      
+      for (const friendship of friendships || []) {
+        const friendId = friendship.requester_id === selectedChild.id 
+          ? friendship.addressee_id 
+          : friendship.requester_id;
         
-        return {
-          id: friendship.id,
-          name: friend.name,
-          avatar: friend.avatar || '👤',
-          status: 'offline' as const, // In real app, would check online status
-          child_id: friend.id
-        };
-      }) || [];
+        const { data: friendProfile, error: profileError } = await supabase
+          .from('children_profiles')
+          .select('id, name, avatar')
+          .eq('id', friendId)
+          .single();
+
+        if (!profileError && friendProfile) {
+          friendsList.push({
+            id: friendship.id,
+            name: friendProfile.name,
+            avatar: friendProfile.avatar || '👤',
+            status: 'offline' as const, // In real app, would check online status
+            child_id: friendProfile.id
+          });
+        }
+      }
 
       setFriends(friendsList);
     } catch (error) {
