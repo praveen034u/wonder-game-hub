@@ -2,13 +2,13 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { useAuth } from "@auth0/auth0-react";
+import { useAppContext } from "@/contexts/Auth0Context";
 import { useState, useRef } from "react";
 import { useToast } from "@/components/ui/use-toast";
 
 const StoryDashboard = () => {
   const navigate = useNavigate();
-  const { activeProfile } = useAuth();
+  const { selectedChild } = useAppContext();
   const { toast } = useToast();
   const [isRecording, setIsRecording] = useState(false);
   const [storyText, setStoryText] = useState("");
@@ -125,7 +125,7 @@ const StoryDashboard = () => {
       <div className="max-w-4xl mx-auto">
         <div className="text-center mb-8">
           <h1 className="text-4xl font-fredoka font-bold text-primary mb-2">
-            📚 Story Time, {activeProfile?.name}!
+            📚 Story Time, {selectedChild?.name}!
           </h1>
           <p className="text-lg text-muted-foreground">Create your own story or choose one to read</p>
         </div>

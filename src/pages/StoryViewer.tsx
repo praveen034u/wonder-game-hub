@@ -1,7 +1,7 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { useAuth } from "@auth0/auth0-react";
+import { useAppContext } from "@/contexts/Auth0Context";
 import { useState, useEffect } from "react";
 import { useToast } from "@/components/ui/use-toast";
 
@@ -13,7 +13,7 @@ interface StorySegment {
 const StoryViewer = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { activeProfile } = useAuth();
+  const { selectedChild } = useAppContext();
   const { toast } = useToast();
   const [currentSegment, setCurrentSegment] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -167,7 +167,7 @@ const StoryViewer = () => {
       <div className="max-w-4xl mx-auto">
         <div className="text-center mb-6">
           <h1 className="text-3xl font-fredoka font-bold text-primary mb-2">
-            📚 Story Time, {activeProfile?.name}!
+            📚 Story Time, {selectedChild?.name}!
           </h1>
           <p className="text-muted-foreground">
             Segment {currentSegment + 1} of {storySegments.length}
