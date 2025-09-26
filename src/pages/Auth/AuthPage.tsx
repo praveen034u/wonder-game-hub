@@ -41,11 +41,18 @@ export const AuthPage = () => {
           <div className="space-y-4">
             <div className="text-center">
               <h3 className="text-lg font-semibold mb-2">Features:</h3>
-              <ul className="text-sm text-muted-foreground space-y-1">
-                <li>✨ AI-powered story generation</li>
-                <li>🎭 Multiple child profiles</li>
-                <li>🎙️ Voice cloning technology</li>
-                <li>📖 Personalized story library</li>
+              <ul className="text-sm text-muted-foreground space-y-3">
+                <li className="space-y-1">
+                  <div className="font-medium text-primary">✨ AI-powered story generation</div>
+                  <ul className="pl-6 space-y-1 text-muted-foreground">
+                    <li>🎭 Multiple child profiles</li>
+                    <li>🎙️ Voice cloning technology</li>
+                    <li>📖 Personalized story library</li>
+                  </ul>
+                </li>
+                <li className="space-y-1">
+                  <div className="font-medium text-primary">🎮 Fun & educational games</div>
+                </li>
               </ul>
             </div>
             <LoginButton />

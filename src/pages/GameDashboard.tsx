@@ -14,6 +14,7 @@ const GameDashboard = () => {
   const [selectedDifficulties, setSelectedDifficulties] = useState<Record<string, string>>({});
   const [showMultiplayerModal, setShowMultiplayerModal] = useState(false);
   const [selectedGame, setSelectedGame] = useState<{ id: string; difficulty: string } | null>(null);
+  const [isFriendsPanelExpanded, setIsFriendsPanelExpanded] = useState(true);
 
   const enabledGames = gamesConfig.filter(game => game.enabled);
 
@@ -41,10 +42,10 @@ const GameDashboard = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/20 via-secondary/20 to-accent/20 p-4">
-      <div className="max-w-6xl mx-auto">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Main Content */}
-          <div className="lg:col-span-3">
+      <div className="max-w-7xl mx-auto">
+        <div className="relative flex flex-col lg:flex-row gap-6">
+          {/* Main Content - Full Width */}
+          <div className="flex-1">
             <div className="text-center mb-8">
               <h1 className="text-4xl font-fredoka font-bold text-primary mb-2">
                 🎮 Game Time, {selectedChild?.name}!
@@ -62,9 +63,9 @@ const GameDashboard = () => {
               </Button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="flex justify-center">
               {enabledGames.map((game) => (
-                <Card key={game.id} className="bg-white/90 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
+                <Card key={game.id} className="bg-white/90 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105 max-w-md w-full">
                   <CardHeader className="text-center pb-4">
                     <div className="text-4xl mb-2">{game.icon}</div>
                     <CardTitle className="text-xl font-fredoka text-primary">
@@ -129,9 +130,25 @@ const GameDashboard = () => {
             )}
           </div>
 
-          {/* Friends Panel */}
-          <div className="lg:col-span-1">
-            <FriendsPanel onInviteFriend={handleInviteFriend} />
+          {/* Friends Panel - Collapsible Right Edge */}
+          <div className={`fixed right-0 top-0 h-full lg:w-80 bg-white/95 shadow-lg transition-transform duration-300 z-50 
+            ${isFriendsPanelExpanded ? 'translate-x-0' : 'translate-x-full'}`}>
+            <div className="relative h-full">
+              {/* Toggle Button */}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute -left-10 top-4 bg-white/95 shadow-md rounded-l-lg h-20"
+                onClick={() => setIsFriendsPanelExpanded(!isFriendsPanelExpanded)}
+              >
+                {isFriendsPanelExpanded ? '👉' : '👈'}
+              </Button>
+              
+              {/* Friends Panel Content */}
+              <div className="h-full p-4 overflow-y-auto">
+                <FriendsPanel onInviteFriend={handleInviteFriend} />
+              </div>
+            </div>
           </div>
         </div>
       </div>

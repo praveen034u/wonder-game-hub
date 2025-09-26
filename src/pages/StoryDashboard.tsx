@@ -2,9 +2,12 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { useAppContext } from "@/contexts/Auth0Context";
 import { useState, useRef } from "react";
 import { useToast } from "@/components/ui/use-toast";
+import { VoiceSelectionPanel } from "@/components/VoiceClone/VoiceSelectionPanel";
 
 const StoryDashboard = () => {
   const navigate = useNavigate();
@@ -13,7 +16,18 @@ const StoryDashboard = () => {
   const [isRecording, setIsRecording] = useState(false);
   const [storyText, setStoryText] = useState("");
   const [isListening, setIsListening] = useState(false);
+  const [isVoicePanelExpanded, setIsVoicePanelExpanded] = useState(false);
+  const [selectedVoice, setSelectedVoice] = useState<{ id: string; name: string; type: "default" | "cloned" } | undefined>();
+  const [newVoiceName, setNewVoiceName] = useState("");
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+
+  const handleVoiceSelect = (voice: { id: string; name: string; type: "default" | "cloned" }) => {
+    setSelectedVoice(voice);
+    toast({
+      title: "Voice Selected",
+      description: `Now using ${voice.name} for story narration`
+    });
+  };
 
   const stories = [
     {
@@ -122,6 +136,23 @@ const StoryDashboard = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-secondary/20 via-accent/20 to-primary/20 p-4">
+      {/* Voice Selection Panel */}
+      <div
+        className={`fixed right-0 top-0 h-full w-80 bg-white shadow-xl transform transition-transform duration-300 z-50 ${
+          isVoicePanelExpanded ? 'translate-x-0' : 'translate-x-full'
+        }`}
+      >
+        <Button
+          variant="ghost"
+          size="sm"
+          className="absolute -left-12 top-4 h-24 w-12 bg-white shadow-lg rounded-l-lg flex items-center justify-center"
+          onClick={() => setIsVoicePanelExpanded(!isVoicePanelExpanded)}
+        >
+          {isVoicePanelExpanded ? '👉' : '🎙️'}
+        </Button>
+        <VoiceSelectionPanel onSelectVoice={handleVoiceSelect} selectedVoice={selectedVoice} />
+      </div>
+
       <div className="max-w-4xl mx-auto">
         <div className="text-center mb-10">
           <h1 className="text-5xl font-fredoka font-bold bg-gradient-to-r from-primary via-secondary to-accent bg-clip-text text-transparent mb-4 drop-shadow-sm">
@@ -152,10 +183,11 @@ const StoryDashboard = () => {
           </CardHeader>
           <CardContent className="space-y-6 p-8">
             <div className="flex gap-3 justify-center mb-6">
+
               {!isRecording ? (
-                <Button
+                <Button 
                   onClick={startVoiceRecording}
-                  className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white shadow-lg transform hover:scale-105 transition-all duration-200"
+                  className="gap-2 bg-gradient-to-r from-blue-500 to-pink-500 hover:from-blue-600 hover:to-pink-600 text-white shadow-lg transition-all duration-300 transform hover:scale-105 font-medium px-8"
                   size="lg"
                 >
                   🎤 Start Recording
@@ -163,12 +195,19 @@ const StoryDashboard = () => {
               ) : (
                 <Button
                   onClick={stopVoiceRecording}
-                  className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white animate-pulse shadow-lg"
+                  className="gap-2 bg-red-500 hover:bg-red-600 text-white shadow-lg transition-all duration-300"
                   size="lg"
                 >
                   ⏹️ Stop Recording
                 </Button>
               )}
+                <Button
+                onClick={() => setIsVoicePanelExpanded(true)}
+                className="bg-gradient-to-r from-secondary to-primary hover:from-secondary/90 hover:to-primary/90 text-white shadow-lg transform hover:scale-105 transition-all duration-2000"
+                size="lg"
+              >
+                🎙️ Voice Settings
+              </Button>
             </div>
             
             {isListening && (
