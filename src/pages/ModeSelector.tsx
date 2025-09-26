@@ -2,7 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@auth0/auth0-react';
 import { Star, Gamepad2, BookOpen, User } from 'lucide-react';
 
 const ModeSelector = () => {
