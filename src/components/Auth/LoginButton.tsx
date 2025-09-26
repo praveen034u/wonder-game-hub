@@ -6,7 +6,26 @@ export const LoginButton = () => {
   const { loginWithRedirect, isLoading } = useAuth0();
 
   const handleLogin = () => {
-    loginWithRedirect();
+    const inIframe = window.self !== window.top;
+
+    if (inIframe) {
+      // Open Auth0 in the top window to avoid CSP frame-ancestors errors
+      (loginWithRedirect as any)({
+        openUrl: (url: string) => {
+          try {
+            if (window.top) {
+              (window.top as Window).location.assign(url);
+            } else {
+              window.location.assign(url);
+            }
+          } catch (e) {
+            window.open(url, '_blank', 'noopener,noreferrer');
+          }
+        }
+      });
+    } else {
+      loginWithRedirect();
+    }
   };
 
   return (

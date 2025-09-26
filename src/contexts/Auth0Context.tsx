@@ -133,26 +133,27 @@ export const AppContextProvider = ({ children }: { children: ReactNode }) => {
           setVoiceSubscription(subscriptionData);
         }
       } else if (user?.email) {
-        // Create parent profile if it doesn't exist
+        // Create parent profile if it doesn't exist (via Edge Function to bypass RLS)
         console.log('Creating new parent profile for user:', user.sub); // Debug log
         const newProfile = {
-          auth0_user_id: user.sub,
-          email: user.email,
-          name: user.name || user.email
+          email: user.email as string,
+          name: (user.name || user.email) as string
         };
 
-        const { data: createdProfile, error: createError } = await supabase
-          .from('parent_profiles')
-          .insert(newProfile)
-          .select()
-          .single();
+        const { data: createResponse, error: createFnError } = await supabase.functions.invoke('manage-profiles', {
+          body: {
+            action: 'create_parent',
+            auth0_user_id: user.sub,
+            profile_data: newProfile
+          }
+        });
 
-        console.log('Profile creation result:', { createdProfile, createError }); // Debug log
+        console.log('Profile creation result (edge function):', { createResponse, createFnError });
 
-        if (createError) {
-          console.error('Error creating parent profile:', createError);
-        } else {
-          setParentProfile(createdProfile);
+        if (createFnError) {
+          console.error('Error creating parent profile (edge):', createFnError);
+        } else if (createResponse?.data) {
+          setParentProfile(createResponse.data);
         }
       }
     } catch (error) {

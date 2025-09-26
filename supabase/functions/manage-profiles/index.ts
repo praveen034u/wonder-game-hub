@@ -32,6 +32,31 @@ serve(async (req) => {
       value: auth0_user_id
     });
 
+    // Create parent profile (server-side, avoids RLS issues from client)
+    if (action === 'create_parent') {
+      const { email, name } = profile_data;
+
+      if (!email) {
+        throw new Error('Email is required to create parent profile');
+      }
+
+      const { data, error } = await supabaseClient
+        .from('parent_profiles')
+        .insert({
+          auth0_user_id,
+          email,
+          name: name || email
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      return new Response(JSON.stringify({ success: true, data }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     if (action === 'create_child') {
       const { parent_id, name, age_group, avatar } = profile_data;
       

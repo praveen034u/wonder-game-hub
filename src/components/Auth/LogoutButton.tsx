@@ -6,7 +6,21 @@ export const LogoutButton = () => {
   const { logout, isLoading } = useAppAuth();
 
   const handleLogout = () => {
-    logout({ logoutParams: { returnTo: window.location.origin } });
+    const returnTo = `${window.location.origin}/`;
+    (logout as any)({ 
+      logoutParams: { returnTo },
+      openUrl: (url: string) => {
+        try {
+          if (window.top) {
+            (window.top as Window).location.assign(url);
+          } else {
+            window.location.assign(url);
+          }
+        } catch (e) {
+          window.open(url, '_blank', 'noopener,noreferrer');
+        }
+      }
+    });
   };
 
   return (
