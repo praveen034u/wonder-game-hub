@@ -52,9 +52,12 @@ export const Auth0ProviderWrapper = ({ children }: { children: ReactNode }) => {
       domain="dev-jbrriuc5vyjmiwtx.us.auth0.com"
       clientId="eh3lkyPjejB7dngFewuGp6FSP1l6j39D"
       authorizationParams={{
-        redirect_uri: window.location.origin,
-        audience: "https://dev-jbrriuc5vyjmiwtx.us.auth0.com/userinfo"
+        redirect_uri: `${window.location.origin}/`,
+        audience: "https://dev-jbrriuc5vyjmiwtx.us.auth0.com/userinfo",
+        scope: "openid profile email"
       }}
+      useRefreshTokens={true}
+      cacheLocation="localstorage"
     >
       <AppContextProvider>
         {children}
