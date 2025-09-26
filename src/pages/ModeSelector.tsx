@@ -2,11 +2,11 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { useAuth } from '@auth0/auth0-react';
+import { useAppContext, useAppAuth } from '@/contexts/Auth0Context';
 import { Star, Gamepad2, BookOpen, User } from 'lucide-react';
 
 const ModeSelector = () => {
-  const { activeProfile } = useAuth();
+  const { selectedChild } = useAppContext();
   const navigate = useNavigate();
 
   return (
@@ -15,7 +15,7 @@ const ModeSelector = () => {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-4xl font-fredoka font-bold text-primary">
-            Hello {activeProfile?.name}! 👋
+            Hello {selectedChild?.name || 'Friend'}! 👋
           </h1>
           <p className="text-lg font-comic text-muted-foreground mt-2">
             What would you like to do today?
