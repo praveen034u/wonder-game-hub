@@ -2,7 +2,7 @@ import React, { createContext, useContext, useReducer, ReactNode } from 'react';
 import { Progress, GameResult, Badge } from '@/types';
 import { StorageService } from '@/lib/storage';
 import { StreakCalculator } from '@/lib/streak';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAppContext } from '@/contexts/Auth0Context';
 
 interface ProgressContextType {
   progress: Progress | null;
@@ -30,24 +30,24 @@ const AVAILABLE_BADGES: Badge[] = [
 ];
 
 export function ProgressProvider({ children }: { children: ReactNode }) {
-  const { activeProfile } = useAuth();
+  const { selectedChild } = useAppContext();
   const [progress, setProgress] = React.useState<Progress | null>(null);
 
   React.useEffect(() => {
-    if (activeProfile) {
+    if (selectedChild) {
       loadProgress();
     }
-  }, [activeProfile]);
+  }, [selectedChild]);
 
   const loadProgress = () => {
-    if (!activeProfile) return;
+    if (!selectedChild) return;
     
     const saved = StorageService.getItem('PROGRESS') as Progress | null;
-    if (saved && saved.profileId === activeProfile.id) {
+    if (saved && saved.profileId === selectedChild.id) {
       setProgress(saved);
     } else {
       const newProgress: Progress = {
-        profileId: activeProfile.id,
+        profileId: selectedChild.id,
         stars: 0,
         badges: [],
         streak: { current: 0, longest: 0, lastPlayedISO: null },

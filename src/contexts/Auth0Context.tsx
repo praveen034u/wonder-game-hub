@@ -89,6 +89,7 @@ export const AppContextProvider = ({ children }: { children: ReactNode }) => {
     setIsLoadingProfiles(true);
     try {
       await setCurrentUser(user.sub);
+      console.log('Auth0 user:', user); // Debug log
 
       // Fetch parent profile
       const { data: parentData, error: parentError } = await supabase
@@ -96,6 +97,8 @@ export const AppContextProvider = ({ children }: { children: ReactNode }) => {
         .select('*')
         .eq('auth0_user_id', user.sub)
         .single();
+
+      console.log('Parent profile fetch result:', { parentData, parentError }); // Debug log
 
       if (parentError && parentError.code !== 'PGRST116') {
         console.error('Error fetching parent profile:', parentError);
@@ -128,6 +131,7 @@ export const AppContextProvider = ({ children }: { children: ReactNode }) => {
         }
       } else if (user?.email) {
         // Create parent profile if it doesn't exist
+        console.log('Creating new parent profile for user:', user.sub); // Debug log
         const newProfile = {
           auth0_user_id: user.sub,
           email: user.email,
@@ -139,6 +143,8 @@ export const AppContextProvider = ({ children }: { children: ReactNode }) => {
           .insert(newProfile)
           .select()
           .single();
+
+        console.log('Profile creation result:', { createdProfile, createError }); // Debug log
 
         if (createError) {
           console.error('Error creating parent profile:', createError);

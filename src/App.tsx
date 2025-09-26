@@ -4,11 +4,9 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ProgressProvider } from "@/contexts/ProgressContext";
-import { AuthProvider } from "@/contexts/AuthContext";
+import { Auth0ProviderWrapper } from "@/contexts/Auth0Context";
 import { AuthPage } from "./pages/Auth/AuthPage";
 import Index from "./pages/Index";
-import Login from "./pages/Login";
-import Signup from "./pages/Signup";
 import Profile from "./pages/Profile";
 import ParentSetup from "./pages/ParentSetup";
 import ModeSelector from "./pages/ModeSelector";
@@ -24,7 +22,7 @@ const queryClient = new QueryClient();
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
-      <AuthProvider>
+      <Auth0ProviderWrapper>
         <ProgressProvider>
           <Toaster />
           <Sonner />
@@ -32,8 +30,6 @@ const App = () => (
             <Routes>
               {/* Auth routes */}
               <Route path="/auth" element={<AuthPage />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/signup" element={<Signup />} />
               
               {/* App routes */}
               <Route path="/profile" element={<Profile />} />
@@ -53,7 +49,7 @@ const App = () => (
             </Routes>
           </BrowserRouter>
         </ProgressProvider>
-      </AuthProvider>
+      </Auth0ProviderWrapper>
     </TooltipProvider>
   </QueryClientProvider>
 );

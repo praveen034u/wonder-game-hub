@@ -5,17 +5,17 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
-import { useAuth } from '@/contexts/AuthContext';
-import { ParentProfile, ParentControl } from '@/types';
+import { useAppAuth, useAppContext } from '@/contexts/Auth0Context';
 import { Shield, Clock, Moon, ArrowRight } from 'lucide-react';
 
 const ParentSetup = () => {
-  const { user, activeProfile, setParentProfile, setParentControl } = useAuth();
+  const { user } = useAppAuth();
+  const { parentProfile, selectedChild } = useAppContext();
   const navigate = useNavigate();
   
   // Parent Profile State
-  const [parentName, setParentName] = useState('');
-  const [parentEmail, setParentEmail] = useState(user?.email || '');
+  const [parentName, setParentName] = useState(parentProfile?.name || user?.name || '');
+  const [parentEmail, setParentEmail] = useState(parentProfile?.email || user?.email || '');
   
   // Screen Time Controls
   const [screenTimeEnabled, setScreenTimeEnabled] = useState(false);
@@ -29,39 +29,9 @@ const ParentSetup = () => {
   const [warningMinutes, setWarningMinutes] = useState(15);
 
   const handleSave = () => {
-    if (!user || !activeProfile || !parentName.trim()) return;
-
-    const parentProfile: ParentProfile = {
-      id: `parent_${Date.now()}`,
-      userId: user.id,
-      name: parentName.trim(),
-      email: parentEmail,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-
-    const parentControl: ParentControl = {
-      id: `control_${Date.now()}`,
-      userId: user.id,
-      childProfileId: activeProfile.id,
-      screenTime: {
-        dailyLimitMinutes,
-        startTime,
-        endTime,
-        enabled: screenTimeEnabled
-      },
-      bedTime: {
-        time: bedTime,
-        enabled: bedTimeEnabled,
-        warningMinutes
-      },
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-
-    setParentProfile(parentProfile);
-    setParentControl(parentControl);
-    
+    // For now, we'll just navigate to modes since the parent profile
+    // is already created in the database via Auth0Context
+    // In a future version, we could store the control settings in the database
     navigate('/modes');
   };
 
@@ -78,7 +48,7 @@ const ParentSetup = () => {
           </div>
           <h1 className="text-3xl font-fredoka font-bold text-primary mb-2">Parent Controls</h1>
           <p className="text-muted-foreground font-comic">
-            Set up screen time and bedtime controls for {activeProfile?.name} (Optional)
+            Set up screen time and bedtime controls for {selectedChild?.name} (Optional)
           </p>
         </div>
 
@@ -234,7 +204,6 @@ const ParentSetup = () => {
               size="lg"
               className="flex-1"
               onClick={handleSave}
-              disabled={!parentName.trim()}
             >
               Save & Continue
               <ArrowRight className="w-4 h-4 ml-2" />

@@ -1,35 +1,34 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "@/contexts/AuthContext";
-import { StorageService } from "@/lib/storage";
+import { useAppAuth, useAppContext } from "@/contexts/Auth0Context";
 
 const Index = () => {
   const navigate = useNavigate();
-  const { isAuthenticated, activeProfile, parentProfile, isLoading } = useAuth();
+  const { isAuthenticated, isLoading } = useAppAuth();
+  const { parentProfile, selectedChild } = useAppContext();
 
   useEffect(() => {
     if (isLoading) return;
     
     if (!isAuthenticated) {
-      navigate('/login', { replace: true });
+      navigate('/auth', { replace: true });
       return;
     }
 
-    // Check if user has completed profile
-    if (!activeProfile) {
+    // Check if user has completed profile setup
+    if (!selectedChild) {
       navigate('/profile', { replace: true });
       return;
     }
 
-    // Check if user has parent profile (for returning users)
-    const userData = StorageService.getUserData();
-    if (userData?.hasCompletedProfile && !parentProfile) {
+    // Check if user has completed parent setup
+    if (!parentProfile) {
       navigate('/parent-setup', { replace: true });
       return;
     }
 
     navigate('/modes', { replace: true });
-  }, [isAuthenticated, activeProfile, parentProfile, isLoading, navigate]);
+  }, [isAuthenticated, selectedChild, parentProfile, isLoading, navigate]);
 
   if (isLoading) {
     return (

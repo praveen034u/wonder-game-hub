@@ -5,10 +5,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useAuth } from '@/contexts/AuthContext';
-import { ChildProfile } from '@/types';
-import { StorageService } from '@/lib/storage';
+import { useAppAuth, useAppContext } from '@/contexts/Auth0Context';
+import { LogoutButton } from '@/components/Auth/LogoutButton';
 import { User, LogOut } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 
 const AVATARS = ['🦄', '🐸', '🦋', '🐱', '🐶', '🦊', '🐯', '🐻'];
 const AGE_GROUPS = [
@@ -19,46 +19,62 @@ const AGE_GROUPS = [
 ];
 
 const Profile = () => {
-  const { user, activeProfile, setActiveProfile, logout } = useAuth();
+  const { user } = useAppAuth();
+  const { parentProfile, selectedChild, setSelectedChild, childrenProfiles, refreshProfiles } = useAppContext();
   const navigate = useNavigate();
   const [name, setName] = useState('');
   const [ageGroup, setAgeGroup] = useState<string>('');
   const [avatar, setAvatar] = useState('🦄');
-  const [isEditing, setIsEditing] = useState(!activeProfile);
+  const [isEditing, setIsEditing] = useState(!selectedChild);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    if (activeProfile) {
-      setName(activeProfile.name);
-      setAgeGroup(activeProfile.ageGroup);
-      setAvatar(activeProfile.avatar);
+    if (selectedChild) {
+      setName(selectedChild.name);
+      setAgeGroup(selectedChild.age_group);
+      setAvatar(selectedChild.avatar || '🦄');
     }
-  }, [activeProfile]);
+  }, [selectedChild]);
 
-  const handleSave = () => {
-    if (!user || !name.trim() || !ageGroup) return;
+  const handleSave = async () => {
+    if (!user?.sub || !name.trim() || !ageGroup || !parentProfile) return;
 
-    const profile: ChildProfile = {
-      id: activeProfile?.id || `profile_${Date.now()}`,
-      userId: user.id,
-      name: name.trim(),
-      ageGroup: ageGroup as any,
-      avatar,
-      createdAt: activeProfile?.createdAt || new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
+    setIsLoading(true);
+    try {
+      const profileData = {
+        name: name.trim(),
+        age_group: ageGroup,
+        avatar,
+        parent_id: parentProfile.id
+      };
 
-    setActiveProfile(profile);
-    setIsEditing(false);
-    
-    // Mark user as having completed profile setup
-    if (!activeProfile && user) {
-      const updatedUser = { ...user, hasCompletedProfile: true };
-      StorageService.saveUserData(updatedUser);
-    }
-    
-    if (!activeProfile) {
-      // First time profile creation - redirect to parent setup
-      navigate('/parent-setup');
+      const { data, error } = await supabase.functions.invoke('manage-profiles', {
+        body: {
+          action: selectedChild ? 'update_child' : 'create_child',
+          auth0_user_id: user.sub,
+          profile_data: selectedChild ? { ...profileData, id: selectedChild.id } : profileData
+        }
+      });
+
+      if (error) throw error;
+
+      await refreshProfiles();
+      
+      if (!selectedChild && data) {
+        // Set the newly created child as selected
+        setSelectedChild(data);
+      }
+      
+      setIsEditing(false);
+      
+      if (!selectedChild) {
+        // First time profile creation - redirect to parent setup
+        navigate('/parent-setup');
+      }
+    } catch (error) {
+      console.error('Error saving profile:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -67,10 +83,7 @@ const Profile = () => {
       {/* Header */}
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-fredoka font-bold text-primary">My Profile</h1>
-        <Button variant="outline" onClick={logout} size="sm">
-          <LogOut className="w-4 h-4 mr-2" />
-          Sign Out
-        </Button>
+        <LogoutButton />
       </div>
 
       <div className="max-w-md mx-auto">
@@ -137,9 +150,9 @@ const Profile = () => {
                   size="kid" 
                   className="w-full"
                   onClick={handleSave}
-                  disabled={!name.trim() || !ageGroup}
+                  disabled={!name.trim() || !ageGroup || isLoading}
                 >
-                  {activeProfile ? '💾 Save Changes' : '🚀 Start Playing!'}
+                  {isLoading ? '💾 Saving...' : (selectedChild ? '💾 Save Changes' : '🚀 Start Playing!')}
                 </Button>
               </>
             ) : (
