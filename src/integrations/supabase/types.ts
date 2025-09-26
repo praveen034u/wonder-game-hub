@@ -58,6 +58,81 @@ export type Database = {
           },
         ]
       }
+      friends: {
+        Row: {
+          addressee_id: string
+          created_at: string
+          id: string
+          requester_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          addressee_id: string
+          created_at?: string
+          id?: string
+          requester_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          addressee_id?: string
+          created_at?: string
+          id?: string
+          requester_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      game_rooms: {
+        Row: {
+          ai_player_avatar: string | null
+          ai_player_name: string | null
+          created_at: string
+          current_players: number
+          difficulty: string
+          game_id: string
+          has_ai_player: boolean
+          host_child_id: string
+          id: string
+          max_players: number
+          room_code: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          ai_player_avatar?: string | null
+          ai_player_name?: string | null
+          created_at?: string
+          current_players?: number
+          difficulty: string
+          game_id: string
+          has_ai_player?: boolean
+          host_child_id: string
+          id?: string
+          max_players?: number
+          room_code: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          ai_player_avatar?: string | null
+          ai_player_name?: string | null
+          created_at?: string
+          current_players?: number
+          difficulty?: string
+          game_id?: string
+          has_ai_player?: boolean
+          host_child_id?: string
+          id?: string
+          max_players?: number
+          room_code?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       generated_stories: {
         Row: {
           audio_url: string | null
@@ -93,6 +168,36 @@ export type Database = {
           },
         ]
       }
+      multiplayer_game_sessions: {
+        Row: {
+          created_at: string
+          current_turn_player_id: string | null
+          game_data: Json | null
+          game_state: string
+          id: string
+          room_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          current_turn_player_id?: string | null
+          game_data?: Json | null
+          game_state?: string
+          id?: string
+          room_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          current_turn_player_id?: string | null
+          game_data?: Json | null
+          game_state?: string
+          id?: string
+          room_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       parent_profiles: {
         Row: {
           auth0_user_id: string
@@ -117,6 +222,36 @@ export type Database = {
           id?: string
           name?: string | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      room_participants: {
+        Row: {
+          child_id: string | null
+          id: string
+          is_ai: boolean
+          joined_at: string
+          player_avatar: string | null
+          player_name: string
+          room_id: string
+        }
+        Insert: {
+          child_id?: string | null
+          id?: string
+          is_ai?: boolean
+          joined_at?: string
+          player_avatar?: string | null
+          player_name: string
+          room_id: string
+        }
+        Update: {
+          child_id?: string | null
+          id?: string
+          is_ai?: boolean
+          joined_at?: string
+          player_avatar?: string | null
+          player_name?: string
+          room_id?: string
         }
         Relationships: []
       }

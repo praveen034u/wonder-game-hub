@@ -3,95 +3,152 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAppContext } from "@/contexts/Auth0Context";
 import gamesConfig from "@/config/games.config.json";
+import GameRoomModal from "@/components/Multiplayer/GameRoomModal";
+import FriendsPanel from "@/components/Multiplayer/FriendsPanel";
 
 const GameDashboard = () => {
   const navigate = useNavigate();
-  const { activeProfile } = useAuth();
+  const { selectedChild } = useAppContext();
   const [selectedDifficulties, setSelectedDifficulties] = useState<Record<string, string>>({});
+  const [showMultiplayerModal, setShowMultiplayerModal] = useState(false);
+  const [selectedGame, setSelectedGame] = useState<{ id: string; difficulty: string } | null>(null);
 
   const enabledGames = gamesConfig.filter(game => game.enabled);
 
-  const handlePlayGame = (gameId: string) => {
+  const handlePlayGame = (gameId: string, multiplayer = false) => {
     const difficulty = selectedDifficulties[gameId] || 'easy';
-    navigate(`/games/${gameId}?difficulty=${difficulty}`);
+    
+    if (multiplayer) {
+      setSelectedGame({ id: gameId, difficulty });
+      setShowMultiplayerModal(true);
+    } else {
+      navigate(`/games/${gameId}?difficulty=${difficulty}`);
+    }
+  };
+
+  const handleStartMultiplayerGame = (roomId: string) => {
+    if (selectedGame) {
+      navigate(`/games/${selectedGame.id}?difficulty=${selectedGame.difficulty}&room=${roomId}`);
+    }
+  };
+
+  const handleInviteFriend = (friendId: string) => {
+    // Logic to invite friend to current game
+    console.log('Inviting friend:', friendId);
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/20 via-secondary/20 to-accent/20 p-4">
-      <div className="max-w-4xl mx-auto">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-fredoka font-bold text-primary mb-2">
-            🎮 Game Time, {activeProfile?.name}!
-          </h1>
-          <p className="text-lg text-muted-foreground">Choose a fun game to play</p>
-        </div>
+      <div className="max-w-6xl mx-auto">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* Main Content */}
+          <div className="lg:col-span-3">
+            <div className="text-center mb-8">
+              <h1 className="text-4xl font-fredoka font-bold text-primary mb-2">
+                🎮 Game Time, {selectedChild?.name}!
+              </h1>
+              <p className="text-lg text-muted-foreground">Choose a fun game to play</p>
+            </div>
 
-        <div className="mb-6 text-center">
-          <Button
-            variant="outline"
-            onClick={() => navigate('/stories')}
-            className="bg-white/80 hover:bg-white text-primary border-2 border-primary/30"
-          >
-            📚 Switch to Stories
-          </Button>
-        </div>
+            <div className="mb-6 text-center">
+              <Button
+                variant="outline"
+                onClick={() => navigate('/stories')}
+                className="bg-white/80 hover:bg-white text-primary border-2 border-primary/30 mr-3"
+              >
+                📚 Switch to Stories
+              </Button>
+            </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {enabledGames.map((game) => (
-            <Card key={game.id} className="bg-white/90 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
-              <CardHeader className="text-center pb-4">
-                <div className="text-4xl mb-2">{game.icon}</div>
-                <CardTitle className="text-xl font-fredoka text-primary">
-                  {game.title}
-                </CardTitle>
-                <CardDescription className="text-muted-foreground">
-                  Test your skills and earn stars!
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground mb-2 block">
-                    Difficulty Level
-                  </label>
-                  <Select
-                    value={selectedDifficulties[game.id] || 'easy'}
-                    onValueChange={(value) => 
-                      setSelectedDifficulties(prev => ({ ...prev, [game.id]: value }))
-                    }
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {game.difficulties.map((difficulty) => (
-                        <SelectItem key={difficulty} value={difficulty}>
-                          <span className="capitalize">{difficulty}</span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Button 
-                  onClick={() => handlePlayGame(game.id)}
-                  className="w-full bg-primary hover:bg-primary/90 text-white"
-                  size="lg"
-                >
-                  Play Now! 🚀
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {enabledGames.map((game) => (
+                <Card key={game.id} className="bg-white/90 shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-105">
+                  <CardHeader className="text-center pb-4">
+                    <div className="text-4xl mb-2">{game.icon}</div>
+                    <CardTitle className="text-xl font-fredoka text-primary">
+                      {game.title}
+                    </CardTitle>
+                    <CardDescription className="text-muted-foreground">
+                      Test your skills and earn stars!
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <label className="text-sm font-medium text-muted-foreground mb-2 block">
+                        Difficulty Level
+                      </label>
+                      <Select
+                        value={selectedDifficulties[game.id] || 'easy'}
+                        onValueChange={(value) => 
+                          setSelectedDifficulties(prev => ({ ...prev, [game.id]: value }))
+                        }
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {game.difficulties.map((difficulty) => (
+                            <SelectItem key={difficulty} value={difficulty}>
+                              <span className="capitalize">{difficulty}</span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    {/* Game Action Buttons */}
+                    <div className="space-y-2">
+                      <Button 
+                        onClick={() => handlePlayGame(game.id, false)}
+                        className="w-full bg-primary hover:bg-primary/90 text-white"
+                        size="lg"
+                      >
+                        Play Solo 🚀
+                      </Button>
+                      <Button 
+                        onClick={() => handlePlayGame(game.id, true)}
+                        variant="outline"
+                        className="w-full border-secondary text-secondary hover:bg-secondary/10"
+                        size="lg"
+                      >
+                        Play with Friends 👥
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
 
-        {enabledGames.length === 0 && (
-          <div className="text-center py-12">
-            <p className="text-lg text-muted-foreground">No games available at the moment.</p>
-            <p className="text-sm text-muted-foreground mt-2">Check back later for more fun!</p>
+            {enabledGames.length === 0 && (
+              <div className="text-center py-12">
+                <p className="text-lg text-muted-foreground">No games available at the moment.</p>
+                <p className="text-sm text-muted-foreground mt-2">Check back later for more fun!</p>
+              </div>
+            )}
           </div>
-        )}
+
+          {/* Friends Panel */}
+          <div className="lg:col-span-1">
+            <FriendsPanel onInviteFriend={handleInviteFriend} />
+          </div>
+        </div>
       </div>
+
+      {/* Multiplayer Modal */}
+      {showMultiplayerModal && selectedGame && (
+        <GameRoomModal
+          isOpen={showMultiplayerModal}
+          onClose={() => {
+            setShowMultiplayerModal(false);
+            setSelectedGame(null);
+          }}
+          gameId={selectedGame.id}
+          difficulty={selectedGame.difficulty}
+          onStartGame={handleStartMultiplayerGame}
+        />
+      )}
     </div>
   );
 };
