@@ -118,6 +118,10 @@ export const AppContextProvider = ({ children }: { children: ReactNode }) => {
           console.error('Error fetching children profiles:', childrenError);
         } else {
           setChildrenProfiles(childrenData || []);
+          // Auto-select the first child if none is selected and we have children
+          if (childrenData && childrenData.length > 0 && !selectedChild) {
+            setSelectedChild(childrenData[0]);
+          }
         }
 
         // Fetch voice subscription
