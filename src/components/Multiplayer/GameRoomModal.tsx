@@ -56,7 +56,16 @@ const GameRoomModal = ({ isOpen, onClose, gameId, difficulty, onStartGame }: Gam
   };
 
   const createGameRoom = async () => {
-    if (!selectedChild?.id) return;
+    console.log('Create room clicked, selectedChild:', selectedChild);
+    
+    if (!selectedChild?.id) {
+      toast({
+        title: "No Child Profile",
+        description: "Please select a child profile first to create a room",
+        variant: "destructive",
+      });
+      return;
+    }
 
     try {
       setIsCreating(true);
@@ -113,7 +122,25 @@ const GameRoomModal = ({ isOpen, onClose, gameId, difficulty, onStartGame }: Gam
   };
 
   const joinRoom = async () => {
-    if (!selectedChild?.id || !joinRoomCode.trim()) return;
+    console.log('Join room clicked, selectedChild:', selectedChild, 'roomCode:', joinRoomCode);
+    
+    if (!selectedChild?.id) {
+      toast({
+        title: "No Child Profile",
+        description: "Please select a child profile first to join a room",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (!joinRoomCode.trim()) {
+      toast({
+        title: "Missing Room Code",
+        description: "Please enter a room code to join",
+        variant: "destructive",
+      });
+      return;
+    }
 
     try {
       setIsJoining(true);
