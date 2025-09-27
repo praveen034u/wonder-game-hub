@@ -11,3 +11,9 @@ verify_jwt = false
 
 [functions.voice-clone]
 verify_jwt = false
+
+[functions.manage-friends]
+verify_jwt = false
+
+[functions.manage-game-rooms]
+verify_jwt = false
