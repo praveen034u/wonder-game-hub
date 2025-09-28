@@ -54,30 +54,30 @@ serve(async (req) => {
 
     switch (action) {
       case 'create_room':
-        // Check if user is already in any active room
-        const { data: existingHosting } = await supabase
+        // Check if user is already in any active room - simplified approach
+        const { data: existingRooms } = await supabase
           .from('room_participants')
-          .select(`
-            id,
-            room_id,
-            game_rooms!inner(
-              id,
-              status,
-              room_code
-            )
-          `)
-          .eq('child_id', child_id)
-          .in('game_rooms.status', ['waiting', 'playing']);
+          .select('room_id')
+          .eq('child_id', child_id);
 
-        if (existingHosting && existingHosting.length > 0) {
-          const activeRoom = existingHosting[0].game_rooms[0];
-          return new Response(
-            JSON.stringify({ 
-              success: false, 
-              error: `You are already in room ${activeRoom.room_code}. Please leave that room first.` 
-            }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+        if (existingRooms && existingRooms.length > 0) {
+          // Check if any of these rooms are still active
+          const roomIds = existingRooms.map(r => r.room_id);
+          const { data: activeRooms } = await supabase
+            .from('game_rooms')
+            .select('room_code, status')
+            .in('id', roomIds)
+            .in('status', ['waiting', 'playing']);
+
+          if (activeRooms && activeRooms.length > 0) {
+            return new Response(
+              JSON.stringify({ 
+                success: false, 
+                error: `You are already in room ${activeRooms[0].room_code}. Please leave that room first.` 
+              }),
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
         }
 
         const roomCode = generateRoomCode();
@@ -148,30 +148,30 @@ serve(async (req) => {
         );
 
       case 'join_room':
-        // Check if user is already in any active room
-        const { data: existingParticipation } = await supabase
+        // Check if user is already in any active room - simplified approach
+        const { data: existingUserRooms } = await supabase
           .from('room_participants')
-          .select(`
-            id,
-            room_id,
-            game_rooms!inner(
-              id,
-              status,
-              room_code
-            )
-          `)
-          .eq('child_id', child_id)
-          .in('game_rooms.status', ['waiting', 'playing']);
+          .select('room_id')
+          .eq('child_id', child_id);
 
-        if (existingParticipation && existingParticipation.length > 0) {
-          const activeRoom = existingParticipation[0].game_rooms[0];
-          return new Response(
-            JSON.stringify({ 
-              success: false, 
-              error: `You are already in room ${activeRoom.room_code}. Please leave that room first.` 
-            }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+        if (existingUserRooms && existingUserRooms.length > 0) {
+          // Check if any of these rooms are still active
+          const userRoomIds = existingUserRooms.map(r => r.room_id);
+          const { data: userActiveRooms } = await supabase
+            .from('game_rooms')
+            .select('room_code, status')
+            .in('id', userRoomIds)
+            .in('status', ['waiting', 'playing']);
+
+          if (userActiveRooms && userActiveRooms.length > 0) {
+            return new Response(
+              JSON.stringify({ 
+                success: false, 
+                error: `You are already in room ${userActiveRooms[0].room_code}. Please leave that room first.` 
+              }),
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
         }
 
         // Find room by code
