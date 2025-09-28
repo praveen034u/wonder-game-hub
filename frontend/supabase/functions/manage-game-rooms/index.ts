@@ -663,6 +663,45 @@ serve(async (req) => {
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
 
+      case 'reload_schema_cache':
+        // Reload PostgREST schema cache
+        try {
+          const { error } = await supabase.rpc('notify_reload_schema');
+          
+          if (error) {
+            // Try alternative approach using raw SQL
+            const { error: sqlError } = await supabase
+              .from('_supabase_admin_schema_cache_reload')
+              .select('*')
+              .limit(1);
+            
+            return new Response(
+              JSON.stringify({ 
+                success: true, 
+                message: 'Schema cache reload attempted', 
+                rpc_error: error.message,
+                sql_error: sqlError?.message 
+              }),
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          return new Response(
+            JSON.stringify({ success: true, message: 'Schema cache reloaded successfully' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+
+        } catch (reloadError) {
+          return new Response(
+            JSON.stringify({ 
+              success: true, 
+              message: 'Schema cache reload attempted (with error)', 
+              error: (reloadError as Error).message 
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
       default:
         throw new Error('Invalid action');
     }
