@@ -36,7 +36,13 @@ serve(async (req) => {
       throw new Error('No authorization token provided');
     }
 
-    // Set the auth token for RLS
+    // Create a separate client for operations that bypass RLS (service role access)
+    const supabaseServiceRole = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
+
+    // Set the auth token for RLS (for operations that need user context)
     supabase.auth.setSession({ access_token: authToken, refresh_token: '' });
 
     const { 
