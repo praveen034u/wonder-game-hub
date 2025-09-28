@@ -11,8 +11,9 @@ interface Player {
   id: string;
   name: string;
   avatar: string;
-  isAI: boolean;
-  status: 'active' | 'away' | 'disconnected';
+  isAI?: boolean;
+  status?: 'active' | 'away' | 'disconnected';
+  score?: number;
 }
 
 interface JoinRequest {
@@ -23,47 +24,58 @@ interface JoinRequest {
 }
 
 interface GameRoomPanelProps {
-  roomCode: string;
+  roomCode?: string;
   gameId: string;
   onPlayerJoin?: (player: Player) => void;
+  players?: Player[];
+  gameMode?: 'single' | 'multiplayer';
 }
 
-const GameRoomPanel = ({ roomCode, gameId, onPlayerJoin }: GameRoomPanelProps) => {
+const GameRoomPanel = ({ roomCode, gameId, onPlayerJoin, players: externalPlayers, gameMode = 'single' }: GameRoomPanelProps) => {
   const { toast } = useToast();
   const [players, setPlayers] = useState<Player[]>([]);
   const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
   const [showJoinRequest, setShowJoinRequest] = useState(false);
   const [currentRequest, setCurrentRequest] = useState<JoinRequest | null>(null);
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(true);
 
   useEffect(() => {
-    loadRoomData();
+    if (gameMode === 'single' && externalPlayers) {
+      setPlayers(externalPlayers);
+      return;
+    }
     
-    // Set up real-time subscription for join requests
-    const channel = supabase
-      .channel('game-room-updates')
-      .on('postgres_changes', 
-        { event: 'INSERT', schema: 'public', table: 'join_requests' },
-        (payload) => {
-          const newRequest = payload.new as JoinRequest;
-          setJoinRequests(prev => [...prev, newRequest]);
-          setCurrentRequest(newRequest);
-          setShowJoinRequest(true);
-          
-          toast({
-            title: "Join Request",
-            description: `${newRequest.player_name} wants to join the game!`,
-          });
-        }
-      )
-      .subscribe();
+    if (gameMode === 'multiplayer' && roomCode) {
+      loadRoomData();
+      
+      // Set up real-time subscription for join requests
+      const channel = supabase
+        .channel('game-room-updates')
+        .on('postgres_changes', 
+          { event: 'INSERT', schema: 'public', table: 'join_requests' },
+          (payload) => {
+            const newRequest = payload.new as JoinRequest;
+            setJoinRequests(prev => [...prev, newRequest]);
+            setCurrentRequest(newRequest);
+            setShowJoinRequest(true);
+            
+            toast({
+              title: "Join Request",
+              description: `${newRequest.player_name} wants to join the game!`,
+            });
+          }
+        )
+        .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [roomCode]);
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
+  }, [roomCode, externalPlayers, gameMode]);
 
   const loadRoomData = async () => {
+    if (!roomCode) return;
+    
     try {
       // Get room info
       const { data: room } = await supabase
@@ -171,7 +183,7 @@ const GameRoomPanel = ({ roomCode, gameId, onPlayerJoin }: GameRoomPanelProps) =
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-sm font-medium">
-                    Room: {roomCode}
+                    {gameMode === 'multiplayer' && roomCode ? `Room: ${roomCode}` : 'Players'}
                   </CardTitle>
                   <Button
                     variant="ghost"
@@ -191,15 +203,22 @@ const GameRoomPanel = ({ roomCode, gameId, onPlayerJoin }: GameRoomPanelProps) =
                     <div key={player.id} className="flex items-center gap-2 p-2 bg-secondary/20 rounded">
                       <Avatar className="w-6 h-6">
                         <AvatarImage src={player.avatar} />
-                        <AvatarFallback className="text-xs">{player.name[0]}</AvatarFallback>
+                        <AvatarFallback className="text-xs">{player.avatar || player.name[0]}</AvatarFallback>
                       </Avatar>
-                      <span className="text-xs font-medium flex-1">{player.name}</span>
+                      <div className="flex-1 flex items-center justify-between">
+                        <span className="text-xs font-medium">{player.name}</span>
+                        {typeof player.score === 'number' && (
+                          <span className="text-xs font-bold text-primary">{player.score}</span>
+                        )}
+                      </div>
                       <div className="flex gap-1">
                         {player.isAI && <Badge variant="secondary" className="text-xs">AI</Badge>}
-                        <div className={`w-2 h-2 rounded-full ${
-                          player.status === 'active' ? 'bg-green-500' :
-                          player.status === 'away' ? 'bg-yellow-500' : 'bg-red-500'
-                        }`} />
+                        {player.status && (
+                          <div className={`w-2 h-2 rounded-full ${
+                            player.status === 'active' ? 'bg-green-500' :
+                            player.status === 'away' ? 'bg-yellow-500' : 'bg-red-500'
+                          }`} />
+                        )}
                       </div>
                     </div>
                   ))}

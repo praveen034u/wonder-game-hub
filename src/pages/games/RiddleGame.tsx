@@ -411,14 +411,14 @@ const RiddleGame = () => {
   // Playing Phase  
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/20 via-secondary/20 to-accent/20 p-4">
-      {/* Multiplayer Room Panel */}
-      {roomCode && (
-        <GameRoomPanel 
-          roomCode={roomCode} 
-          gameId={gameId || 'riddle'}
-          onPlayerJoin={handlePlayerJoin}
-        />
-      )}
+      {/* Player Panel - Always visible */}
+      <GameRoomPanel 
+        roomCode={roomCode} 
+        gameId={gameId || 'riddle'}
+        onPlayerJoin={handlePlayerJoin}
+        players={players}
+        gameMode={roomCode ? 'multiplayer' : 'single'}
+      />
       
       <div className="max-w-md mx-auto">
         <Card className="bg-white/90 shadow-xl">
