@@ -92,7 +92,7 @@ const JoinRequestButton = ({ className }: JoinRequestButtonProps) => {
         
         // Navigate to the game room
         const room = data.room;
-        window.location.href = `/games/${room.game_id}?difficulty=${room.difficulty}&room=${room.id}`;
+        window.location.href = `/games/${room.game_id}?difficulty=${room.difficulty}&room=${room.room_code}`;
       } else {
         toast({
           title: "Failed to Join",
