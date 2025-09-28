@@ -54,13 +54,13 @@ const RiddleGame = () => {
   }
   
   const [gamePhase, setGamePhase] = useState<GamePhase>('countdown');
-  const [playerName] = useState(activeProfile?.name || 'Player');
   const [selectedCategory] = useState<string>('Zoo Animals');
   const [players, setPlayers] = useState<Player[]>([]);
   const [currentRiddleIndex, setCurrentRiddleIndex] = useState(0);
 
   useEffect(() => {
     // Automatically start the game when component mounts
+    const playerName = activeProfile?.name || 'Player';
     const newPlayers: Player[] = [
       {
         id: activeProfile?.id || 'player1',
@@ -131,13 +131,20 @@ const RiddleGame = () => {
   };
 
   const handlePlayerJoin = (newPlayer: any) => {
-    setPlayers(prev => [...prev, {
-      id: newPlayer.id,
-      name: newPlayer.name,
-      avatar: newPlayer.avatar,
-      score: 0,
-      isAI: newPlayer.isAI
-    }]);
+    // Add new player if not already in the list
+    setPlayers(prev => {
+      const exists = prev.find(p => p.id === newPlayer.id);
+      if (!exists) {
+        return [...prev, {
+          id: newPlayer.id,
+          name: newPlayer.name,
+          avatar: newPlayer.avatar,
+          score: 0,
+          isAI: newPlayer.isAI
+        }];
+      }
+      return prev;
+    });
   };
 
   const handleAnswerSelect = (answer: string) => {
@@ -281,7 +288,7 @@ const RiddleGame = () => {
           <CardHeader className="text-center">
             <div className="text-6xl mb-4">🎉</div>
             <CardTitle className="text-2xl font-fredoka text-primary">
-              Great Job, {playerName}!
+              Great Job, {activeProfile?.name || 'Player'}!
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6 text-center">
