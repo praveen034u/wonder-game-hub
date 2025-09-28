@@ -40,6 +40,25 @@ serve(async (req) => {
         throw new Error('Email is required to create parent profile');
       }
 
+      // First check if profile already exists
+      const { data: existingProfile, error: fetchError } = await supabaseClient
+        .from('parent_profiles')
+        .select('*')
+        .eq('auth0_user_id', auth0_user_id)
+        .single();
+
+      if (fetchError && fetchError.code !== 'PGRST116') {
+        throw fetchError;
+      }
+
+      if (existingProfile) {
+        // Profile already exists, return it
+        return new Response(JSON.stringify({ success: true, data: existingProfile }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Create new profile if it doesn't exist
       const { data, error } = await supabaseClient
         .from('parent_profiles')
         .insert({
