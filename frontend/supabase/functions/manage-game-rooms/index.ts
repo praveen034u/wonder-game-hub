@@ -47,7 +47,9 @@ serve(async (req) => {
       room_name, 
       room_code, 
       friend_ids = [],
-      room_id 
+      room_id,
+      request_id,
+      approve
     } = await req.json();
 
     console.log('Received request:', { action, child_id, game_id, room_code });
