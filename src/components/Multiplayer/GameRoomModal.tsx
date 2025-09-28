@@ -27,7 +27,7 @@ interface GameRoomModalProps {
 }
 
 const GameRoomModal = ({ isOpen, onClose, gameId, difficulty, onStartGame }: GameRoomModalProps) => {
-  const { selectedChild } = useAppContext();
+  const { selectedChild, childrenProfiles, setSelectedChild, refreshProfiles } = useAppContext();
   const { toast } = useToast();
   const [players, setPlayers] = useState<Player[]>([]);
   const [roomCode, setRoomCode] = useState("");
@@ -39,10 +39,22 @@ const GameRoomModal = ({ isOpen, onClose, gameId, difficulty, onStartGame }: Gam
   const [activeTab, setActiveTab] = useState("create");
 
   useEffect(() => {
-    if (isOpen && selectedChild) {
+    if (!isOpen) return;
+    // Auto-select the first child if none is selected
+    if (!selectedChild && childrenProfiles.length > 0) {
+      setSelectedChild(childrenProfiles[0]);
+      return; // initialize will run when selectedChild updates
+    }
+    if (selectedChild) {
       initializeRoom();
     }
-  }, [isOpen, selectedChild]);
+  }, [isOpen, selectedChild, childrenProfiles, setSelectedChild]);
+
+  useEffect(() => {
+    if (isOpen && childrenProfiles.length === 0) {
+      refreshProfiles();
+    }
+  }, [isOpen, childrenProfiles.length, refreshProfiles]);
 
   const initializeRoom = () => {
     if (!selectedChild) return;
@@ -56,12 +68,12 @@ const GameRoomModal = ({ isOpen, onClose, gameId, difficulty, onStartGame }: Gam
   };
 
   const createGameRoom = async () => {
-    console.log('Create room clicked, selectedChild:', selectedChild);
-    
-    if (!selectedChild?.id) {
+    console.log('Create room clicked, selectedChild:', selectedChild, 'childrenProfiles:', childrenProfiles);
+    const activeChild = selectedChild || childrenProfiles[0];
+    if (!activeChild?.id) {
       toast({
         title: "No Child Profile",
-        description: "Please select a child profile first to create a room",
+        description: "Please create a child profile first to create a room",
         variant: "destructive",
       });
       return;
@@ -73,9 +85,9 @@ const GameRoomModal = ({ isOpen, onClose, gameId, difficulty, onStartGame }: Gam
       const { data } = await supabase.functions.invoke('manage-game-rooms', {
         body: {
           action: 'create_room',
-          child_id: selectedChild.id,
+          child_id: activeChild.id,
           game_id: gameId,
-          difficulty: difficulty,
+          difficulty,
           room_name: customRoomName
         }
       });
@@ -85,9 +97,9 @@ const GameRoomModal = ({ isOpen, onClose, gameId, difficulty, onStartGame }: Gam
         setCurrentRoom(room);
         setRoomCode(room.room_code);
         setPlayers([{
-          id: selectedChild.id,
-          name: selectedChild.name,
-          avatar: selectedChild.avatar || '👤',
+          id: activeChild.id,
+          name: activeChild.name,
+          avatar: activeChild.avatar || '👤',
           isAI: false
         }]);
 
@@ -122,12 +134,13 @@ const GameRoomModal = ({ isOpen, onClose, gameId, difficulty, onStartGame }: Gam
   };
 
   const joinRoom = async () => {
-    console.log('Join room clicked, selectedChild:', selectedChild, 'roomCode:', joinRoomCode);
+    console.log('Join room clicked, selectedChild:', selectedChild, 'childrenProfiles:', childrenProfiles, 'roomCode:', joinRoomCode);
     
-    if (!selectedChild?.id) {
+    const activeChild = selectedChild || childrenProfiles[0];
+    if (!activeChild?.id) {
       toast({
         title: "No Child Profile",
-        description: "Please select a child profile first to join a room",
+        description: "Please create a child profile first to join a room",
         variant: "destructive",
       });
       return;
@@ -148,7 +161,7 @@ const GameRoomModal = ({ isOpen, onClose, gameId, difficulty, onStartGame }: Gam
       const { data } = await supabase.functions.invoke('manage-game-rooms', {
         body: {
           action: 'join_room',
-          child_id: selectedChild.id,
+          child_id: activeChild.id,
           room_code: joinRoomCode.toUpperCase()
         }
       });
