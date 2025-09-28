@@ -58,7 +58,7 @@ const ModeSelector = () => {
           </CardHeader>
           <CardContent className="text-center space-y-4">
             <p className="text-lg font-comic text-muted-foreground">
-              Play riddles, word games, and brain teasers to earn stars and badges!
+              Play riddles, word games, and brain teasers to earn stars and badges!!
             </p>
             <div className="space-y-2 text-sm font-comic">
               <div className="flex items-center justify-center gap-2">
