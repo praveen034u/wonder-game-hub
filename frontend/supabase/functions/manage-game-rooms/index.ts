@@ -666,36 +666,37 @@ serve(async (req) => {
       case 'reload_schema_cache':
         // Reload PostgREST schema cache
         try {
-          const { error } = await supabase.rpc('notify_reload_schema');
+          console.log('Attempting to reload PostgREST schema cache...');
+          const { data, error } = await supabase.rpc('notify_reload_schema');
           
           if (error) {
-            // Try alternative approach using raw SQL
-            const { error: sqlError } = await supabase
-              .from('_supabase_admin_schema_cache_reload')
-              .select('*')
-              .limit(1);
-            
+            console.error('Error calling notify_reload_schema:', error);
             return new Response(
               JSON.stringify({ 
-                success: true, 
-                message: 'Schema cache reload attempted', 
-                rpc_error: error.message,
-                sql_error: sqlError?.message 
+                success: false, 
+                message: 'Failed to reload schema cache', 
+                error: error.message
               }),
               { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             );
           }
 
+          console.log('Schema cache reload notification sent successfully');
           return new Response(
-            JSON.stringify({ success: true, message: 'Schema cache reloaded successfully' }),
+            JSON.stringify({ 
+              success: true, 
+              message: 'Schema cache reload notification sent successfully',
+              data: data
+            }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
 
         } catch (reloadError) {
+          console.error('Exception during schema reload:', reloadError);
           return new Response(
             JSON.stringify({ 
-              success: true, 
-              message: 'Schema cache reload attempted (with error)', 
+              success: false, 
+              message: 'Exception during schema reload attempt', 
               error: (reloadError as Error).message 
             }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
