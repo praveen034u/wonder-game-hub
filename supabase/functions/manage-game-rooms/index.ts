@@ -54,30 +54,21 @@ serve(async (req) => {
 
     switch (action) {
       case 'create_room':
-        // Check if user is already in any active room - simplified approach
-        const { data: existingRooms } = await supabase
-          .from('room_participants')
-          .select('room_id')
-          .eq('child_id', child_id);
+        // Check if user is already in any active room using the in_room flag
+        const { data: userProfile } = await supabase
+          .from('children_profiles')
+          .select('in_room')
+          .eq('id', child_id)
+          .single();
 
-        if (existingRooms && existingRooms.length > 0) {
-          // Check if any of these rooms are still active
-          const roomIds = existingRooms.map(r => r.room_id);
-          const { data: activeRooms } = await supabase
-            .from('game_rooms')
-            .select('room_code, status')
-            .in('id', roomIds)
-            .in('status', ['waiting', 'playing']);
-
-          if (activeRooms && activeRooms.length > 0) {
-            return new Response(
-              JSON.stringify({ 
-                success: false, 
-                error: `You are already in room ${activeRooms[0].room_code}. Please leave that room first.` 
-              }),
-              { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            );
-          }
+        if (userProfile?.in_room) {
+          return new Response(
+            JSON.stringify({ 
+              success: false, 
+              error: 'You are currently in another room. Please leave that room first.' 
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
         }
 
         const roomCode = generateRoomCode();
@@ -118,6 +109,12 @@ serve(async (req) => {
             is_ai: false
           });
 
+        // Set host as in_room
+        await supabase
+          .from('children_profiles')
+          .update({ in_room: true })
+          .eq('id', child_id);
+
         // If no friends available, add AI player
         if (friend_ids.length === 0) {
           const aiFriend = AI_FRIENDS[Math.floor(Math.random() * AI_FRIENDS.length)];
@@ -148,30 +145,21 @@ serve(async (req) => {
         );
 
       case 'join_room':
-        // Check if user is already in any active room - simplified approach
-        const { data: existingUserRooms } = await supabase
-          .from('room_participants')
-          .select('room_id')
-          .eq('child_id', child_id);
+        // Check if user is already in any active room using the in_room flag
+        const { data: joiningUserProfile } = await supabase
+          .from('children_profiles')
+          .select('in_room')
+          .eq('id', child_id)
+          .single();
 
-        if (existingUserRooms && existingUserRooms.length > 0) {
-          // Check if any of these rooms are still active
-          const userRoomIds = existingUserRooms.map(r => r.room_id);
-          const { data: userActiveRooms } = await supabase
-            .from('game_rooms')
-            .select('room_code, status')
-            .in('id', userRoomIds)
-            .in('status', ['waiting', 'playing']);
-
-          if (userActiveRooms && userActiveRooms.length > 0) {
-            return new Response(
-              JSON.stringify({ 
-                success: false, 
-                error: `You are already in room ${userActiveRooms[0].room_code}. Please leave that room first.` 
-              }),
-              { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            );
-          }
+        if (joiningUserProfile?.in_room) {
+          return new Response(
+            JSON.stringify({ 
+              success: false, 
+              error: 'You are currently in another room. Please leave that room first.' 
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
         }
 
         // Find room by code
@@ -214,6 +202,12 @@ serve(async (req) => {
             is_ai: false
           });
 
+        // Set player as in_room
+        await supabase
+          .from('children_profiles')
+          .update({ in_room: true })
+          .eq('id', child_id);
+
         // Update room player count
         await supabase
           .from('game_rooms')
@@ -235,6 +229,12 @@ serve(async (req) => {
 
         if (leaveError) throw leaveError;
 
+        // Set player as not in_room
+        await supabase
+          .from('children_profiles')
+          .update({ in_room: false })
+          .eq('id', child_id);
+
         // Get updated room info
         const { data: updatedRoom } = await supabase
           .from('game_rooms')
@@ -251,6 +251,21 @@ serve(async (req) => {
               .from('game_rooms')
               .delete()
               .eq('id', room_id);
+            
+            // Set all remaining participants as not in_room
+            const { data: remainingParticipants } = await supabase
+              .from('room_participants')
+              .select('child_id')
+              .eq('room_id', room_id)
+              .not('child_id', 'is', null);
+
+            if (remainingParticipants && remainingParticipants.length > 0) {
+              const participantIds = remainingParticipants.map(p => p.child_id);
+              await supabase
+                .from('children_profiles')
+                .update({ in_room: false })
+                .in('id', participantIds);
+            }
           } else {
             // Update player count
             await supabase
@@ -381,6 +396,12 @@ serve(async (req) => {
               })
               .select()
               .single();
+
+            // Set player as in_room
+            await supabase
+              .from('children_profiles')
+              .update({ in_room: true })
+              .eq('id', joinRequest.child_id);
 
             // Update room player count
             await supabase

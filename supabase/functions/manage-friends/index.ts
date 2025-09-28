@@ -26,7 +26,7 @@ serve(async (req) => {
     // Set the auth token for RLS
     supabase.auth.setSession({ access_token: authToken, refresh_token: '' });
 
-    const { action, child_id, friend_child_id, friend_request_id, search_query } = await req.json();
+    const { action, child_id, friend_child_id, friend_request_id, search_query, friend_ids } = await req.json();
 
     console.log('Received request:', { action, child_id, friend_child_id });
 
@@ -89,6 +89,41 @@ serve(async (req) => {
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
 
+      case 'list_friends':
+        // List accepted friends for this child
+        const { data: friendsList, error: friendsError } = await supabase
+          .from('friends')
+          .select(`
+            id,
+            status,
+            requester_id,
+            addressee_id,
+            requester:children_profiles!friends_requester_id_fkey(id, name, avatar, in_room),
+            addressee:children_profiles!friends_addressee_id_fkey(id, name, avatar, in_room)
+          `)
+          .or(`requester_id.eq.${child_id},addressee_id.eq.${child_id}`)
+          .eq('status', 'accepted');
+
+        if (friendsError) throw friendsError;
+
+        // Transform to get the friend's data (not current child's data)
+        const friends = friendsList?.map(f => {
+          const friendData = f.requester_id === child_id ? f.addressee?.[0] : f.requester?.[0];
+          return {
+            id: f.id,
+            child_id: friendData?.id,
+            name: friendData?.name,
+            avatar: friendData?.avatar,
+            status: friendData?.in_room ? 'in-game' : 'online',
+            in_room: friendData?.in_room
+          };
+        }) || [];
+
+        return new Response(
+          JSON.stringify({ success: true, data: friends }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+
       case 'get_friend_requests':
         // Get pending friend requests for this child
         const { data: requests, error: requestsError } = await supabase
@@ -140,19 +175,50 @@ serve(async (req) => {
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
 
+      case 'get_friends_by_ids':
+        // Get specific friends by their IDs
+        if (!friend_ids || !Array.isArray(friend_ids) || friend_ids.length === 0) {
+          return new Response(
+            JSON.stringify({ success: true, data: [] }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const { data: specificFriends, error: specificFriendsError } = await supabase
+          .from('children_profiles')
+          .select('id, name, avatar, in_room')
+          .in('id', friend_ids);
+
+        if (specificFriendsError) throw specificFriendsError;
+
+        const friendsWithStatus = specificFriends?.map(friend => ({
+          ...friend,
+          child_id: friend.id,
+          status: friend.in_room ? 'in-game' : 'online'
+        })) || [];
+
+        return new Response(
+          JSON.stringify({ success: true, data: friendsWithStatus }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+
       case 'list_all_children':
         // List all children across all parents (service role bypasses RLS)
         const { data: allChildren, error: listError } = await supabase
           .from('children_profiles')
-          .select('id, name, avatar, updated_at, is_online, last_seen_at')
+          .select('id, name, avatar, updated_at, is_online, last_seen_at, in_room')
           .neq('id', child_id)
           .order('is_online', { ascending: false })
           .order('last_seen_at', { ascending: false });
 
-        if (listError) throw listError;
+        // Transform children data to include status based on in_room flag
+        const childrenWithStatus = allChildren?.map(child => ({
+          ...child,
+          status: child.in_room ? 'in-game' : (child.is_online ? 'online' : 'offline')
+        })) || [];
 
         return new Response(
-          JSON.stringify({ success: true, data: allChildren || [] }),
+          JSON.stringify({ success: true, data: childrenWithStatus }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
 

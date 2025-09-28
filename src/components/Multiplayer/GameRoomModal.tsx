@@ -26,6 +26,7 @@ interface Friend {
   avatar: string;
   status: 'online' | 'offline' | 'in-game';
   child_id: string;
+  in_room?: boolean;
 }
 
 interface OnlineUser {
@@ -34,6 +35,7 @@ interface OnlineUser {
   avatar: string;
   is_online: boolean;
   status: 'online' | 'offline' | 'in-game';
+  in_room?: boolean;
 }
 
 interface GameRoomModalProps {
@@ -405,7 +407,7 @@ const GameRoomModal = ({ isOpen, onClose, gameId, difficulty, onStartGame, invit
                             </Avatar>
                             <span>{friend.name}</span>
                             <Badge variant={friend.status === 'online' ? 'default' : friend.status === 'in-game' ? 'secondary' : 'outline'} className="text-xs">
-                              {friend.status === 'in-game' ? 'In Game' : friend.status}
+                              {friend.status === 'in-game' || friend.in_room ? 'In Room' : friend.status}
                             </Badge>
                           </div>
                         ))}
@@ -464,7 +466,7 @@ const GameRoomModal = ({ isOpen, onClose, gameId, difficulty, onStartGame, invit
                             </Avatar>
                             <span className="text-sm">{friend.name}</span>
                             <Badge variant={friend.status === 'online' ? 'default' : friend.status === 'in-game' ? 'secondary' : 'outline'} className="text-xs">
-                              {friend.status === 'in-game' ? 'In Game' : friend.status}
+                              {friend.status === 'in-game' || friend.in_room ? 'In Room' : friend.status}
                             </Badge>
                           </div>
                         </div>
@@ -487,18 +489,18 @@ const GameRoomModal = ({ isOpen, onClose, gameId, difficulty, onStartGame, invit
                                 setSelectedFriendIds(prev => prev.filter(id => id !== user.id));
                               }
                             }}
-                            disabled={user.status === 'in-game'}
+                            disabled={user.status === 'in-game' || user.in_room}
                           />
                           <div className="flex items-center gap-2 flex-1">
                             <Avatar className="w-6 h-6">
                               <AvatarImage src={user.avatar} />
                               <AvatarFallback>{user.name[0]}</AvatarFallback>
                             </Avatar>
-                            <span className={`text-sm ${user.status === 'in-game' ? 'text-muted-foreground' : ''}`}>
+                            <span className={`text-sm ${user.status === 'in-game' || user.in_room ? 'text-muted-foreground' : ''}`}>
                               {user.name}
                             </span>
                             <Badge variant={user.status === 'online' ? 'default' : user.status === 'in-game' ? 'secondary' : 'outline'} className="text-xs">
-                              {user.status === 'in-game' ? 'In Game' : user.status}
+                              {user.status === 'in-game' || user.in_room ? 'In Room' : user.status}
                             </Badge>
                           </div>
                         </div>

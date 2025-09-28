@@ -20,6 +20,7 @@ export type Database = {
           avatar: string | null
           created_at: string
           id: string
+          in_room: boolean | null
           is_online: boolean | null
           last_seen_at: string | null
           name: string
@@ -33,6 +34,7 @@ export type Database = {
           avatar?: string | null
           created_at?: string
           id?: string
+          in_room?: boolean | null
           is_online?: boolean | null
           last_seen_at?: string | null
           name: string
@@ -46,6 +48,7 @@ export type Database = {
           avatar?: string | null
           created_at?: string
           id?: string
+          in_room?: boolean | null
           is_online?: boolean | null
           last_seen_at?: string | null
           name?: string
