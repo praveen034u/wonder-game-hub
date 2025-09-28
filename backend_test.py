@@ -79,7 +79,7 @@ class SupabaseTestSuite:
             print("\n=== Testing Rooms Function Connectivity ===")
             get_data = {
                 'action': 'get_pending_invitations',
-                'child_id': 'non-existent-id'  # This should return empty list, not error
+                'child_id': str(uuid.uuid4())  # Use proper UUID format
             }
             
             response = requests.post(rooms_url, json=get_data, headers=self.headers)
