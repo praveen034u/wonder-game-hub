@@ -663,56 +663,6 @@ serve(async (req) => {
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
 
-      case 'debug_schema':
-        // Debug action to check and fix schema issues
-        try {
-          // First, let's check what columns exist in join_requests
-          const { data: tableInfo, error: infoError } = await supabase
-            .from('join_requests')
-            .select('*')
-            .limit(1);
-
-          console.log('join_requests table structure check:', { tableInfo, infoError });
-
-          // Try to get pending invitations to see the actual error
-          const { data: testInvitations, error: testError } = await supabase
-            .from('join_requests')
-            .select(`
-              id,
-              room_code,
-              room_id,
-              player_name,
-              player_avatar,
-              created_at
-            `)
-            .eq('status', 'pending')
-            .limit(1);
-
-          console.log('Basic join_requests query:', { testInvitations, testError });
-
-          return new Response(
-            JSON.stringify({ 
-              success: true, 
-              debug_info: {
-                table_structure: tableInfo,
-                table_error: infoError?.message,
-                basic_query: testInvitations,
-                basic_query_error: testError?.message
-              }
-            }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-
-        } catch (debugError) {
-          return new Response(
-            JSON.stringify({ 
-              success: false, 
-              error: `Debug failed: ${(debugError as Error).message}` 
-            }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-
       default:
         throw new Error('Invalid action');
     }
