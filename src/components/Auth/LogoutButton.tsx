@@ -8,7 +8,7 @@ export const LogoutButton = () => {
 
   const handleLogout = async () => {
     try {
-      // Set in_room status to false for all children before logout
+      // Set room_id to null for all children before logout
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         // Get all children profiles for this user
@@ -24,15 +24,15 @@ export const LogoutButton = () => {
           )?.data?.id);
         
         if (children && children.length > 0) {
-          // Set all children's in_room status to false
+          // Set all children's room_id to null (equivalent to leaving rooms)
           await supabase
             .from('children_profiles')
-            .update({ in_room: false })
+            .update({ room_id: null } as any)
             .in('id', children.map(c => c.id));
         }
       }
     } catch (error) {
-      console.error('Error updating in_room status on logout:', error);
+      console.error('Error updating room status on logout:', error);
     }
     
     const returnTo = `${window.location.origin}/`;

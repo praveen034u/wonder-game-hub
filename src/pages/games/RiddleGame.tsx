@@ -12,6 +12,7 @@ import GameRoomPanel from "@/components/Multiplayer/GameRoomPanel";
 import { AppHeader } from "@/components/Navigation/AppHeader";
 import riddlesData from "@/config/riddles.json";
 import type { Riddle, GameResult } from "@/types";
+import { supabase } from "@/integrations/supabase/client";
 
 type Player = {
   id: string;
@@ -59,33 +60,115 @@ const RiddleGame = () => {
   const [currentRiddleIndex, setCurrentRiddleIndex] = useState(0);
 
   useEffect(() => {
-    // Automatically start the game when component mounts
-    const playerName = selectedChild?.name || 'Player';
-    const newPlayers: Player[] = [
-      {
+    if (roomCode) {
+      // Load room participants for multiplayer
+      loadRoomData();
+    } else {
+      // Single player mode
+      const playerName = selectedChild?.name || 'Player';
+      const newPlayers: Player[] = [
+        {
+          id: selectedChild?.id || 'player1',
+          name: playerName,
+          avatar: selectedChild?.avatar || '👤',
+          score: 0
+        },
+        {
+          id: 'ai1',
+          name: 'Vini',
+          avatar: '🐵',
+          score: 0,
+          isAI: true
+        }
+      ];
+      
+      setPlayers(newPlayers);
+      startCountdown();
+    }
+  }, [roomCode]);
+
+  const loadRoomData = async () => {
+    if (!roomCode || !selectedChild) return;
+
+    try {
+      // Get room details
+      const { data: roomData } = await supabase
+        .from('game_rooms')
+        .select('*')
+        .eq('room_code', roomCode)
+        .single();
+
+      if (roomData) {
+        setCurrentRoomId(roomData.id);
+        setIsRoomCreator(roomData.host_child_id === selectedChild.id);
+
+        // Load room participants
+        const { data: participants } = await supabase
+          .from('room_participants')
+          .select('*')
+          .eq('room_id', roomData.id);
+
+        if (participants) {
+          const playerList: Player[] = participants.map(p => ({
+            id: p.child_id || p.id,
+            name: p.player_name,
+            avatar: p.player_avatar || '👤',
+            score: 0,
+            isAI: p.is_ai
+          }));
+          
+          setPlayers(playerList);
+          
+          // Initialize scores in database
+          await initializeGameScores(roomData.id, playerList);
+        }
+      }
+      
+      startCountdown();
+    } catch (error) {
+      console.error('Error loading room data:', error);
+      // Fallback to single player
+      const playerName = selectedChild?.name || 'Player';
+      setPlayers([{
         id: selectedChild?.id || 'player1',
         name: playerName,
         avatar: selectedChild?.avatar || '👤',
         score: 0
-      },
-      {
-        id: 'ai1',
-        name: 'Vini',
-        avatar: '🐵',
-        score: 0,
-        isAI: true
-      }
-    ];
-    
-    setPlayers(newPlayers);
-    
-    // Set room creator status if room code exists
-    if (roomCode) {
-      setIsRoomCreator(true);
+      }]);
+      startCountdown();
     }
-    
-    // Start countdown
+  };
+
+  const initializeGameScores = async (roomId: string, playerList: Player[]) => {
+    try {
+      // Clear existing scores for this room
+      await supabase
+        .from('multiplayer_game_scores')
+        .delete()
+        .eq('room_id', roomId);
+      
+      // Insert initial scores for all players
+      const scoreEntries = playerList.map(player => ({
+        room_id: roomId,
+        child_id: player.isAI ? null : player.id,
+        player_name: player.name,
+        player_avatar: player.avatar,
+        is_ai: player.isAI || false,
+        score: 0,
+        total_questions: 0
+      }));
+
+      await supabase
+        .from('multiplayer_game_scores')
+        .insert(scoreEntries);
+    } catch (error) {
+      console.error('Error initializing game scores:', error);
+    }
+  };
+
+  const startCountdown = () => {
     let count = 3;
+    setCountdown(count);
     const timer = setInterval(() => {
       count--;
       setCountdown(count);
@@ -94,14 +177,13 @@ const RiddleGame = () => {
         setGamePhase('playing');
       }
     }, 1000);
-
-    return () => clearInterval(timer);
-  }, [roomCode]);
+  };
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [showFeedback, setShowFeedback] = useState(false);
   const [countdown, setCountdown] = useState(3);
   const [isRoomCreator, setIsRoomCreator] = useState(false);
   const [pendingJoinRequests, setPendingJoinRequests] = useState(0);
+  const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
 
   // Get riddles for selected category and difficulty
   const getCategoryRiddles = (category: string) => {
@@ -119,15 +201,50 @@ const RiddleGame = () => {
     // Simulate AI players answering with random delays
     const aiPlayers = players.filter(p => p.isAI);
     aiPlayers.forEach((aiPlayer, index) => {
-      setTimeout(() => {
+      setTimeout(async () => {
         const isCorrect = Math.random() > 0.4; // 60% chance of correct answer
         if (isCorrect) {
           setPlayers(prev => prev.map(p => 
             p.id === aiPlayer.id ? { ...p, score: p.score + 1 } : p
           ));
         }
+        
+        // Update AI score in database for multiplayer
+        if (currentRoomId) {
+          await updateAIPlayerScore(aiPlayer.id, isCorrect ? 1 : 0);
+        }
       }, (index + 1) * 1500 + Math.random() * 1000);
     });
+  };
+
+  const updateAIPlayerScore = async (aiPlayerId: string, scoreIncrement: number) => {
+    if (!currentRoomId) return;
+
+    try {
+      const { data: currentScore } = await supabase
+        .from('multiplayer_game_scores')
+        .select('score, total_questions')
+        .eq('room_id', currentRoomId)
+        .eq('is_ai', true)
+        .eq('child_id', null)
+        .eq('player_name', players.find(p => p.id === aiPlayerId)?.name)
+        .single();
+
+      if (currentScore) {
+        await supabase
+          .from('multiplayer_game_scores')
+          .update({
+            score: currentScore.score + scoreIncrement,
+            total_questions: currentScore.total_questions + 1
+          })
+          .eq('room_id', currentRoomId)
+          .eq('is_ai', true)
+          .eq('child_id', null)
+          .eq('player_name', players.find(p => p.id === aiPlayerId)?.name);
+      }
+    } catch (error) {
+      console.error('Error updating AI player score:', error);
+    }
   };
 
   const handlePlayerJoin = (newPlayer: any) => {
@@ -147,7 +264,7 @@ const RiddleGame = () => {
     });
   };
 
-  const handleAnswerSelect = (answer: string) => {
+  const handleAnswerSelect = async (answer: string) => {
     if (showFeedback) return;
     
     setSelectedAnswer(answer);
@@ -156,11 +273,16 @@ const RiddleGame = () => {
     const correctAnswerText = currentRiddle.options[currentRiddle.correctAnswer];
     const isCorrect = answer === correctAnswerText;
     
-    // Update player score
+    // Update player score locally
     if (isCorrect) {
       setPlayers(prev => prev.map(p => 
         p.id === (selectedChild?.id || 'player1') ? { ...p, score: p.score + 1 } : p
       ));
+    }
+
+    // Update score in database for multiplayer
+    if (currentRoomId) {
+      await updatePlayerScore(selectedChild?.id || 'player1', isCorrect ? 1 : 0);
     }
 
     // Simulate AI answers
@@ -183,6 +305,32 @@ const RiddleGame = () => {
     setTimeout(() => {
       nextQuestion();
     }, 2000);
+  };
+
+  const updatePlayerScore = async (playerId: string, scoreIncrement: number) => {
+    if (!currentRoomId) return;
+
+    try {
+      const { data: currentScore } = await supabase
+        .from('multiplayer_game_scores')
+        .select('score, total_questions')
+        .eq('room_id', currentRoomId)
+        .eq('child_id', playerId)
+        .single();
+
+      if (currentScore) {
+        await supabase
+          .from('multiplayer_game_scores')
+          .update({
+            score: currentScore.score + scoreIncrement,
+            total_questions: currentScore.total_questions + 1
+          })
+          .eq('room_id', currentRoomId)
+          .eq('child_id', playerId);
+      }
+    } catch (error) {
+      console.error('Error updating player score:', error);
+    }
   };
 
   const nextQuestion = () => {

@@ -54,14 +54,14 @@ serve(async (req) => {
 
     switch (action) {
       case 'create_room':
-        // Check if user is already in any active room using the in_room flag
+        // Check if user is already in any active room using the room_id column
         const { data: userProfile } = await supabase
           .from('children_profiles')
-          .select('in_room')
+          .select('room_id')
           .eq('id', child_id)
           .single();
 
-        if (userProfile?.in_room) {
+        if (userProfile?.room_id) {
           return new Response(
             JSON.stringify({ 
               success: false, 
@@ -109,10 +109,10 @@ serve(async (req) => {
             is_ai: false
           });
 
-        // Set host as in_room
+        // Set host as in room
         await supabase
           .from('children_profiles')
-          .update({ in_room: true })
+          .update({ room_id: newRoom.id } as any)
           .eq('id', child_id);
 
         // If no friends available, add AI player
@@ -145,14 +145,14 @@ serve(async (req) => {
         );
 
       case 'join_room':
-        // Check if user is already in any active room using the in_room flag
+        // Check if user is already in any active room using the room_id column
         const { data: joiningUserProfile } = await supabase
           .from('children_profiles')
-          .select('in_room')
+          .select('room_id')
           .eq('id', child_id)
           .single();
 
-        if (joiningUserProfile?.in_room) {
+        if (joiningUserProfile?.room_id) {
           return new Response(
             JSON.stringify({ 
               success: false, 
@@ -202,10 +202,10 @@ serve(async (req) => {
             is_ai: false
           });
 
-        // Set player as in_room
+        // Set player as in room
         await supabase
           .from('children_profiles')
-          .update({ in_room: true })
+          .update({ room_id: room.id } as any)
           .eq('id', child_id);
 
         // Update room player count
@@ -229,10 +229,10 @@ serve(async (req) => {
 
         if (leaveError) throw leaveError;
 
-        // Set player as not in_room
+        // Set player as not in room
         await supabase
           .from('children_profiles')
-          .update({ in_room: false })
+          .update({ room_id: null } as any)
           .eq('id', child_id);
 
         // Get updated room info
@@ -252,7 +252,7 @@ serve(async (req) => {
               .delete()
               .eq('id', room_id);
             
-            // Set all remaining participants as not in_room
+            // Set all remaining participants as not in room
             const { data: remainingParticipants } = await supabase
               .from('room_participants')
               .select('child_id')
@@ -263,7 +263,7 @@ serve(async (req) => {
               const participantIds = remainingParticipants.map(p => p.child_id);
               await supabase
                 .from('children_profiles')
-                .update({ in_room: false })
+                .update({ room_id: null } as any)
                 .in('id', participantIds);
             }
           } else {
@@ -433,10 +433,10 @@ serve(async (req) => {
               .select()
               .single();
 
-            // Set player as in_room
+            // Set player as in room
             await supabase
               .from('children_profiles')
-              .update({ in_room: true })
+              .update({ room_id: roomForJoin.id } as any)
               .eq('id', joinRequest.child_id);
 
             // Update room player count
@@ -463,7 +463,7 @@ serve(async (req) => {
         );
 
       case 'close_room':
-        // When host closes the room, set all participants' in_room status to false
+        // When host closes the room, set all participants' room_id to null
         const { data: allRoomParticipants } = await supabase
           .from('room_participants')
           .select('child_id')
@@ -474,7 +474,7 @@ serve(async (req) => {
           if (participantIds.length > 0) {
             await supabase
               .from('children_profiles')
-              .update({ in_room: false })
+              .update({ room_id: null } as any)
               .in('id', participantIds);
           }
         }
@@ -534,11 +534,11 @@ serve(async (req) => {
         // Check if user is already in a room
         const { data: userRoomStatus } = await supabase
           .from('children_profiles')
-          .select('in_room')
+          .select('room_id')
           .eq('id', child_id)
           .single();
 
-        if (userRoomStatus?.in_room) {
+        if (userRoomStatus?.room_id) {
           return new Response(
             JSON.stringify({ success: false, error: 'You are already in a room' }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -574,10 +574,10 @@ serve(async (req) => {
           .select()
           .single();
 
-        // Set player as in_room
+        // Set player as in room
         await supabase
           .from('children_profiles')
-          .update({ in_room: true })
+          .update({ room_id: roomData.id } as any)
           .eq('id', child_id);
 
         // Update room player count

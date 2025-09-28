@@ -54,11 +54,16 @@ const RoomManagementModal = ({ isOpen, onClose }: RoomManagementModalProps) => {
   const [selectedFriendIds, setSelectedFriendIds] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoadingFriends, setIsLoadingFriends] = useState(false);
+  
+  // Invitations management
+  const [pendingInvitations, setPendingInvitations] = useState<any[]>([]);
+  const [isLoadingInvitations, setIsLoadingInvitations] = useState(false);
 
   useEffect(() => {
     if (!isOpen || !selectedChild) return;
     loadCurrentRoom();
     loadFriends();
+    loadPendingInvitations();
   }, [isOpen, selectedChild]);
 
   const loadCurrentRoom = async () => {
@@ -185,6 +190,95 @@ const RoomManagementModal = ({ isOpen, onClose }: RoomManagementModalProps) => {
       });
     } finally {
       setIsLoadingFriends(false);
+    }
+  };
+
+  const loadPendingInvitations = async () => {
+    if (!selectedChild) return;
+
+    try {
+      setIsLoadingInvitations(true);
+      
+      const { data } = await supabase.functions.invoke('manage-game-rooms', {
+        body: {
+          action: 'get_pending_invitations',
+          child_id: selectedChild.id
+        }
+      });
+
+      if (data?.success) {
+        setPendingInvitations(data.data || []);
+      }
+    } catch (error) {
+      console.error('Error loading pending invitations:', error);
+    } finally {
+      setIsLoadingInvitations(false);
+    }
+  };
+
+  const acceptInvitation = async (invitationId: string) => {
+    if (!selectedChild) return;
+
+    try {
+      const { data } = await supabase.functions.invoke('manage-game-rooms', {
+        body: {
+          action: 'accept_invitation',
+          child_id: selectedChild.id,
+          invitation_id: invitationId
+        }
+      });
+
+      if (data?.success) {
+        toast({
+          title: "Joined Room!",
+          description: "Successfully joined the room",
+        });
+        loadCurrentRoom();
+        loadPendingInvitations();
+      } else {
+        toast({
+          title: "Error",
+          description: data?.error || "Failed to accept invitation",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error accepting invitation:', error);
+      toast({
+        title: "Error",
+        description: "Failed to accept invitation",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const declineInvitation = async (invitationId: string) => {
+    if (!selectedChild) return;
+
+    try {
+      const { data } = await supabase.functions.invoke('manage-game-rooms', {
+        body: {
+          action: 'decline_invitation',
+          child_id: selectedChild.id,
+          invitation_id: invitationId
+        }
+      });
+
+      if (data?.success) {
+        toast({
+          title: "Invitation Declined",
+          description: "You have declined the invitation",
+        });
+        loadPendingInvitations();
+      } else {
+        toast({
+          title: "Error",
+          description: data?.error || "Failed to decline invitation",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error declining invitation:', error);
     }
   };
 
@@ -488,13 +582,85 @@ const RoomManagementModal = ({ isOpen, onClose }: RoomManagementModalProps) => {
               <div className="text-center">
                 <h3 className="text-lg font-semibold mb-2">Join Room</h3>
                 <p className="text-sm text-muted-foreground">
-                  Enter room code to join a game
+                  Pending invitations and join a room
                 </p>
               </div>
 
               <div className="space-y-4">
+                {/* Pending Invitations */}
+                <Card>
+                  <CardContent className="p-3">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">🎮 Game Invitations</span>
+                      </div>
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        onClick={loadPendingInvitations}
+                        disabled={isLoadingInvitations}
+                      >
+                        🔄
+                      </Button>
+                    </div>
+
+                    <div className="max-h-48 overflow-y-auto space-y-2">
+                      {pendingInvitations.map((invitation) => (
+                        <Card key={invitation.id} className="border border-primary/20">
+                          <CardContent className="p-3">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <Avatar className="w-8 h-8">
+                                  <AvatarImage src={invitation.player_avatar} />
+                                  <AvatarFallback>{invitation.player_name?.[0] || '?'}</AvatarFallback>
+                                </Avatar>
+                                <div>
+                                  <p className="text-sm font-medium">{invitation.player_name}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    Room: {invitation.room_code} • {invitation.game_rooms?.game_id}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex gap-1">
+                                <Button
+                                  size="sm"
+                                  onClick={() => acceptInvitation(invitation.id)}
+                                  className="h-8 px-3"
+                                >
+                                  ✓
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => declineInvitation(invitation.id)}
+                                  className="h-8 px-3"
+                                >
+                                  ✕
+                                </Button>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+
+                      {pendingInvitations.length === 0 && !isLoadingInvitations && (
+                        <div className="text-center py-4 text-muted-foreground">
+                          <p className="text-sm">No pending invitations</p>
+                        </div>
+                      )}
+
+                      {isLoadingInvitations && (
+                        <div className="text-center py-4 text-muted-foreground">
+                          <p className="text-sm">Loading invitations...</p>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Manual Room Join */}
                 <div>
-                  <Label htmlFor="join-room-code">Room Code</Label>
+                  <Label htmlFor="join-room-code">Or Enter Room Code</Label>
                   <Input
                     id="join-room-code"
                     placeholder="Enter room code..."
@@ -511,10 +677,6 @@ const RoomManagementModal = ({ isOpen, onClose }: RoomManagementModalProps) => {
                 >
                   {isJoining ? "Joining..." : "Join Room"}
                 </Button>
-
-                <div className="text-xs text-muted-foreground text-center">
-                  💡 You can only join rooms you've been invited to
-                </div>
               </div>
             </TabsContent>
 
