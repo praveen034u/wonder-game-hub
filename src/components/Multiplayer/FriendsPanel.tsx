@@ -318,18 +318,10 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
       </CardHeader>
       <CardContent className="space-y-4 h-full">
         <Tabs defaultValue="friends" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="friends">Friends</TabsTrigger>
-            <TabsTrigger value="requests">
-              Requests
-              {friendRequests.length > 0 && (
-                <Badge variant="destructive" className="ml-1 text-xs">
-                  {friendRequests.length}
-                </Badge>
-              )}
-            </TabsTrigger>
             <TabsTrigger value="search">
-              Online Users
+              Find New Friends
               <Badge variant="secondary" className="ml-1 text-xs">
                 {onlineUsers.length}
               </Badge>
@@ -376,54 +368,6 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
                   <div className="text-center py-8 text-muted-foreground">
                     <p className="text-sm">No friends yet!</p>
                     <p className="text-xs">Search and add friends to play together</p>
-                  </div>
-                )}
-              </div>
-            </ScrollArea>
-          </TabsContent>
-
-          <TabsContent value="requests" className="space-y-4">
-            <ScrollArea className="h-60">
-              <div className="space-y-2">
-                {friendRequests.map((request) => (
-                  <div
-                    key={request.id}
-                    className="flex items-center justify-between p-3 bg-yellow-100 dark:bg-yellow-900/20 rounded-lg"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Avatar className="w-8 h-8">
-                        <AvatarImage src={request.requester.avatar} />
-                        <AvatarFallback>{request.requester.name[0]}</AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <p className="font-medium text-sm">{request.requester.name}</p>
-                        <p className="text-xs text-muted-foreground">wants to be friends</p>
-                      </div>
-                    </div>
-                    
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        onClick={() => handleFriendRequest(request.id, 'accept')}
-                        disabled={isLoading}
-                      >
-                        Accept
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleFriendRequest(request.id, 'decline')}
-                        disabled={isLoading}
-                      >
-                        Decline
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-                
-                {friendRequests.length === 0 && (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <p className="text-sm">No friend requests</p>
                   </div>
                 )}
               </div>
