@@ -491,6 +491,11 @@ class SupabaseTestSuite:
         print("🚀 Starting Supabase Functions Test Suite")
         print("=" * 60)
         
+        # Test basic connectivity first
+        print("\n🔗 TESTING FUNCTION CONNECTIVITY")
+        print("=" * 60)
+        connectivity_results = self.test_function_connectivity()
+        
         # Test friends management
         print("\n📱 TESTING FRIENDS MANAGEMENT FUNCTIONS")
         print("=" * 60)
@@ -503,6 +508,7 @@ class SupabaseTestSuite:
         
         # Compile overall results
         overall_results = {
+            'connectivity': connectivity_results,
             'friends_management': friends_results,
             'game_rooms_management': rooms_results,
             'summary': {
@@ -514,7 +520,7 @@ class SupabaseTestSuite:
         }
         
         # Calculate summary
-        for category in [friends_results, rooms_results]:
+        for category in [connectivity_results, friends_results, rooms_results]:
             for test_name, result in category.items():
                 if test_name != 'errors':
                     overall_results['summary']['total_tests'] += 1
