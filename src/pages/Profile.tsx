@@ -20,30 +20,33 @@ const AGE_GROUPS = [
 
 const Profile = () => {
   const { user } = useAppAuth();
-  const { parentProfile, selectedChild, setSelectedChild, childrenProfiles, refreshProfiles } = useAppContext();
+  const { parentProfile, selectedChild, setSelectedChild, childrenProfiles, refreshProfiles, isLoadingProfiles } = useAppContext();
   const navigate = useNavigate();
   const [name, setName] = useState('');
   const [ageGroup, setAgeGroup] = useState<string>('');
   const [avatar, setAvatar] = useState('🦄');
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditing, setIsEditing] = useState(() => {
+    // Wait for profiles to load before determining initial state
+    // Default to false (show children list) to prevent flashing
+    return false;
+  });
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
+    // Wait for profiles to finish loading before setting the correct state
+    if (isLoadingProfiles) return;
+    
     if (selectedChild) {
       setName(selectedChild.name);
       setAgeGroup(selectedChild.age_group);
       setAvatar(selectedChild.avatar || '🦄');
-      setIsEditing(false); // Ensure we're not in editing mode when child is selected
+      setIsEditing(false); // Show children list when child is selected
     } else {
-      // If no children exist, go straight to editing mode
-      if (!childrenProfiles || childrenProfiles.length === 0) {
-        setIsEditing(true);
-      } else {
-        // If children exist but none selected, show the children list (not editing mode)
-        setIsEditing(false);
-      }
+      // Only show editing mode if there are no children profiles at all
+      const shouldEdit = !childrenProfiles || childrenProfiles.length === 0;
+      setIsEditing(shouldEdit);
     }
-  }, [selectedChild, childrenProfiles]);
+  }, [selectedChild, childrenProfiles, isLoadingProfiles]);
 
   const handleSave = async () => {
     if (!user?.sub || !name.trim() || !ageGroup || !parentProfile) return;
@@ -95,8 +98,20 @@ const Profile = () => {
       />
       
       <div className="container mx-auto px-4 py-6 max-w-2xl">
+        {/* Show loading state while profiles are loading */}
+        {isLoadingProfiles && (
+          <Card className="shadow-soft">
+            <CardContent className="py-8">
+              <div className="text-center">
+                <div className="text-2xl mb-2">⏳</div>
+                <p className="text-muted-foreground">Loading profiles...</p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Existing Children List */}
-        {!isEditing && childrenProfiles && childrenProfiles.length > 0 && (
+        {!isLoadingProfiles && !isEditing && childrenProfiles && childrenProfiles.length > 0 && (
           <Card className="shadow-soft">
             <CardHeader>
               <CardTitle className="font-fredoka text-center">My Children</CardTitle>
@@ -161,7 +176,7 @@ const Profile = () => {
         )}
 
         {/* Profile Creation/Editing Form */}
-        {(isEditing || !childrenProfiles || childrenProfiles.length === 0) && (
+        {!isLoadingProfiles && (isEditing || !childrenProfiles || childrenProfiles.length === 0) && (
           <Card className="shadow-soft">
             <CardHeader className="text-center">
               <div className="w-20 h-20 mx-auto bg-gradient-primary rounded-full flex items-center justify-center text-4xl shadow-soft">
