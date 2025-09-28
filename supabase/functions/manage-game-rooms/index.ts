@@ -281,19 +281,48 @@ serve(async (req) => {
         );
 
       case 'invite_friends':
-        // Send invitations to friends (could be expanded with notification system)
-        const invitations = friend_ids.map((friendId: string) => ({
-          room_id: room_id,
-          invited_child_id: friendId,
-          invited_by: child_id,
-          status: 'pending'
-        }));
+        // Get host info for the invitations
+        const { data: inviteHostProfile } = await supabase
+          .from('children_profiles')
+          .select('name, avatar')
+          .eq('id', child_id)
+          .single();
 
-        // For now, just return success - in a real app, you'd store invitations
-        console.log('Invitations would be sent:', invitations);
+        const { data: roomInfo } = await supabase
+          .from('game_rooms')
+          .select('room_code, game_id, difficulty')
+          .eq('id', room_id)
+          .single();
+
+        if (!inviteHostProfile || !roomInfo) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'Host or room not found' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Create join requests for each invited friend
+        const invitations = [];
+        for (const friendId of friend_ids) {
+          const { data: inviteRequest } = await supabase
+            .from('join_requests')
+            .insert({
+              room_code: roomInfo.room_code,
+              child_id: friendId,
+              player_name: inviteHostProfile.name || 'Host',
+              player_avatar: inviteHostProfile.avatar || '👤',
+              status: 'pending'
+            })
+            .select()
+            .single();
+
+          if (inviteRequest) {
+            invitations.push(inviteRequest);
+          }
+        }
 
         return new Response(
-          JSON.stringify({ success: true, invitations_sent: friend_ids.length }),
+          JSON.stringify({ success: true, invitations_sent: invitations.length }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
 
@@ -410,7 +439,12 @@ serve(async (req) => {
               .eq('id', roomForJoin.id);
 
             return new Response(
-              JSON.stringify({ success: true, player: newParticipant }),
+              JSON.stringify({ 
+                success: true, 
+                player: newParticipant,
+                room: roomForJoin,
+                room_id: roomForJoin.id
+              }),
               { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             );
           }

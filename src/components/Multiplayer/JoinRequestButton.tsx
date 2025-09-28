@@ -81,14 +81,18 @@ const JoinRequestButton = ({ className }: JoinRequestButtonProps) => {
         }
       });
 
-      if (data?.success) {
+      if (data?.success && data?.room) {
         toast({
           title: "Invitation Accepted!",
-          description: "You have joined the game room",
+          description: `You joined ${selectedChild?.name}'s room`,
         });
         setShowInvitations(false);
         setIsOpen(false);
         await fetchPendingRequests(); // Refresh the list
+        
+        // Navigate to the game room
+        const room = data.room;
+        window.location.href = `/games/${room.game_id}?difficulty=${room.difficulty}&room=${room.id}`;
       } else {
         toast({
           title: "Failed to Join",
@@ -301,7 +305,7 @@ const JoinRequestButton = ({ className }: JoinRequestButtonProps) => {
                             <div className="flex-1">
                               <p className="font-medium text-sm">Room: {request.room_code}</p>
                               <p className="text-xs text-muted-foreground">
-                                Invited {new Date(request.created_at).toLocaleTimeString()}
+                                From {request.player_name} • {new Date(request.created_at).toLocaleTimeString()}
                               </p>
                             </div>
                           </div>
