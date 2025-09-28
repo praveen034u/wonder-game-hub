@@ -74,13 +74,6 @@ const RiddleGame = () => {
         avatar: '🐵',
         score: 0,
         isAI: true
-      },
-      {
-        id: 'ai2', 
-        name: 'Mimi',
-        avatar: '🐘',
-        score: 0,
-        isAI: true
       }
     ];
     
