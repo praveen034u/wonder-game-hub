@@ -311,7 +311,6 @@ serve(async (req) => {
             .from('join_requests')
             .insert({
               room_code: roomInfo.room_code,
-              room_id: room_id,
               child_id: friendId,
               player_name: inviteHostProfile.name || 'Host',
               player_avatar: inviteHostProfile.avatar || '👤',
