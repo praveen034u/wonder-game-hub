@@ -34,6 +34,14 @@ interface SearchResult {
   avatar: string;
 }
 
+interface OnlineUser {
+  id: string;
+  name: string;
+  avatar: string;
+  status: 'online' | 'in-game';
+  last_seen?: string;
+}
+
 interface FriendsPanelProps {
   onInviteFriend: (friendId: string) => void;
 }
@@ -44,14 +52,18 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
   const [friends, setFriends] = useState<Friend[]>([]);
   const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([]);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
+  const [isLoadingOnlineUsers, setIsLoadingOnlineUsers] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
 
   useEffect(() => {
     if (selectedChild) {
       loadFriends();
       loadFriendRequests();
+      loadOnlineUsers();
     }
   }, [selectedChild]);
 
@@ -108,8 +120,55 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
     }
   };
 
-  const loadFriendRequests = async () => {
+  const loadOnlineUsers = async () => {
     if (!selectedChild?.id) return;
+
+    try {
+      setIsLoadingOnlineUsers(true);
+      
+      // Get recently active children (within last 30 minutes)
+      const thirtyMinutesAgo = new Date();
+      thirtyMinutesAgo.setMinutes(thirtyMinutesAgo.getMinutes() - 30);
+      
+      const { data: activeChildren, error } = await supabase
+        .from('children_profiles')
+        .select('id, name, avatar, updated_at')
+        .neq('id', selectedChild.id) // Exclude current child
+        .gte('updated_at', thirtyMinutesAgo.toISOString())
+        .order('updated_at', { ascending: false });
+
+      if (error) throw error;
+
+      const onlineUsersList: OnlineUser[] = (activeChildren || []).map(child => ({
+        id: child.id,
+        name: child.name,
+        avatar: child.avatar || '👤',
+        status: 'online' as const,
+        last_seen: child.updated_at
+      }));
+
+      setOnlineUsers(onlineUsersList);
+    } catch (error) {
+      console.error('Error loading online users:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load online users",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingOnlineUsers(false);
+    }
+  };
+
+  const refreshOnlineUsers = () => {
+    loadOnlineUsers();
+    toast({
+      title: "Refreshed",
+      description: "Online users list updated",
+    });
+  };
+
+  const loadFriendRequests = async () => {
 
     try {
       const { data } = await supabase.functions.invoke('manage-friends', {
@@ -269,7 +328,12 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
                 </Badge>
               )}
             </TabsTrigger>
-            <TabsTrigger value="search">Search</TabsTrigger>
+            <TabsTrigger value="search">
+              Online Users
+              <Badge variant="secondary" className="ml-1 text-xs">
+                {onlineUsers.length}
+              </Badge>
+            </TabsTrigger>
           </TabsList>
           
           <TabsContent value="friends" className="space-y-4">
@@ -368,61 +432,131 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
 
           <TabsContent value="search" className="space-y-4">
             <div className="flex gap-2">
-              <Input
-                placeholder="Search by name..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="flex-1"
-              />
+              <Button
+                onClick={refreshOnlineUsers}
+                disabled={isLoadingOnlineUsers}
+                size="sm"
+                variant="outline"
+                className="flex items-center gap-2"
+              >
+                🔄 Refresh
+              </Button>
+              <Button
+                onClick={() => setShowSearch(!showSearch)}
+                size="sm"
+                variant="ghost"
+                className="flex items-center gap-2"
+              >
+                {showSearch ? '👥 Show Online' : '🔍 Search Users'}
+              </Button>
             </div>
 
-            <ScrollArea className="h-60">
-              <div className="space-y-2">
-                {isSearching && (
-                  <div className="text-center py-4 text-muted-foreground">
-                    <p className="text-sm">Searching...</p>
-                  </div>
-                )}
-                
-                {!isSearching && searchResults.map((result) => (
-                  <div
-                    key={result.id}
-                    className="flex items-center justify-between p-3 bg-secondary/20 rounded-lg"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Avatar className="w-8 h-8">
-                        <AvatarImage src={result.avatar} />
-                        <AvatarFallback>{result.name[0]}</AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <p className="font-medium text-sm">{result.name}</p>
+            {showSearch ? (
+              <>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Search by name..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="flex-1"
+                  />
+                </div>
+
+                <ScrollArea className="h-60">
+                  <div className="space-y-2">
+                    {isSearching && (
+                      <div className="text-center py-4 text-muted-foreground">
+                        <p className="text-sm">Searching...</p>
                       </div>
-                    </div>
+                    )}
                     
-                    <Button
-                      size="sm"
-                      onClick={() => sendFriendRequest(result.id)}
-                      disabled={isLoading}
+                    {!isSearching && searchResults.map((result) => (
+                      <div
+                        key={result.id}
+                        className="flex items-center justify-between p-3 bg-secondary/20 rounded-lg"
+                      >
+                        <div className="flex items-center gap-3">
+                          <Avatar className="w-8 h-8">
+                            <AvatarImage src={result.avatar} />
+                            <AvatarFallback>{result.name[0]}</AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <p className="font-medium text-sm">{result.name}</p>
+                          </div>
+                        </div>
+                        
+                        <Button
+                          size="sm"
+                          onClick={() => sendFriendRequest(result.id)}
+                          disabled={isLoading}
+                        >
+                          Add Friend
+                        </Button>
+                      </div>
+                    ))}
+                    
+                    {!isSearching && searchQuery && searchResults.length === 0 && (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <p className="text-sm">No users found</p>
+                        <p className="text-xs">Try a different search term</p>
+                      </div>
+                    )}
+                    
+                    {!searchQuery && (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <p className="text-sm">Search for friends by name</p>
+                      </div>
+                    )}
+                  </div>
+                </ScrollArea>
+              </>
+            ) : (
+              <ScrollArea className="h-60">
+                <div className="space-y-2">
+                  {isLoadingOnlineUsers && (
+                    <div className="text-center py-4 text-muted-foreground">
+                      <p className="text-sm">Loading online users...</p>
+                    </div>
+                  )}
+                  
+                  {!isLoadingOnlineUsers && onlineUsers.map((user) => (
+                    <div
+                      key={user.id}
+                      className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800"
                     >
-                      Add Friend
-                    </Button>
-                  </div>
-                ))}
-                
-                {!isSearching && searchQuery && searchResults.length === 0 && (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <p className="text-sm">No users found</p>
-                    <p className="text-xs">Try a different search term</p>
-                  </div>
-                )}
-                
-                {!searchQuery && (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <p className="text-sm">Search for friends by name</p>
-                  </div>
-                )}
-              </div>
-            </ScrollArea>
+                      <div className="flex items-center gap-3">
+                        <div className="relative">
+                          <Avatar className="w-8 h-8">
+                            <AvatarImage src={user.avatar} />
+                            <AvatarFallback>{user.name[0]}</AvatarFallback>
+                          </Avatar>
+                          <div className="absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-background bg-green-500" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-sm">{user.name}</p>
+                          <p className="text-xs text-muted-foreground">Online now</p>
+                        </div>
+                      </div>
+                      
+                      <Button
+                        size="sm"
+                        onClick={() => onInviteFriend(user.id)}
+                        className="bg-primary hover:bg-primary/90"
+                      >
+                        Invite to Game
+                      </Button>
+                    </div>
+                  ))}
+                  
+                  {!isLoadingOnlineUsers && onlineUsers.length === 0 && (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <p className="text-sm">No users are currently online</p>
+                      <p className="text-xs">Users who have been active in the last 30 minutes will appear here</p>
+                    </div>
+                  )}
+                </div>
+              </ScrollArea>
+            )}
           </TabsContent>
         </Tabs>
       </CardContent>
