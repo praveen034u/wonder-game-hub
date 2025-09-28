@@ -10,7 +10,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useAppContext } from "@/contexts/Auth0Context";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Search, Users, UserPlus } from "lucide-react";
+import { Search, Users, UserPlus, Home } from "lucide-react";
+import type { GameRoom } from "@/types/multiplayer";
 
 interface Friend {
   id: string;
@@ -61,6 +62,8 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [isLoadingOnlineUsers, setIsLoadingOnlineUsers] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [currentRoom, setCurrentRoom] = useState<GameRoom | null>(null);
+  const [isLoadingRoom, setIsLoadingRoom] = useState(false);
 
   useEffect(() => {
     if (selectedChild) {
@@ -364,6 +367,79 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
+  const loadCurrentRoom = async () => {
+    if (!selectedChild) return;
+
+    try {
+      setIsLoadingRoom(true);
+      
+      // Check if child is in a room
+      const { data: roomParticipant } = await supabase
+        .from('room_participants')
+        .select(`
+          room_id,
+          game_rooms(*)
+        `)
+        .eq('child_id', selectedChild.id)
+        .single();
+
+      if (roomParticipant?.game_rooms) {
+        setCurrentRoom(roomParticipant.game_rooms as GameRoom);
+      } else {
+        setCurrentRoom(null);
+      }
+    } catch (error) {
+      console.error('Error loading current room:', error);
+      setCurrentRoom(null);
+    } finally {
+      setIsLoadingRoom(false);
+    }
+  };
+
+  const handleLeaveRoom = async () => {
+    if (!selectedChild || !currentRoom) return;
+
+    try {
+      setIsLoadingRoom(true);
+      
+      const { data } = await supabase.functions.invoke('manage-game-rooms', {
+        body: {
+          action: 'leave_room',
+          child_id: selectedChild.id,
+          room_id: currentRoom.id
+        }
+      });
+
+      if (data?.success) {
+        toast({
+          title: "Left Room",
+          description: "You have successfully left the room",
+        });
+        setCurrentRoom(null);
+        // Update child's in_room status
+        await supabase
+          .from('children_profiles')
+          .update({ in_room: false })
+          .eq('id', selectedChild.id);
+      } else {
+        toast({
+          title: "Error",
+          description: data?.error || "Failed to leave room",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error leaving room:', error);
+      toast({
+        title: "Error",
+        description: "Failed to leave room",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingRoom(false);
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'online': return 'bg-green-500';
@@ -385,10 +461,19 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
       </CardHeader>
       <CardContent className="space-y-4 h-full">
         <Tabs defaultValue="friends" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="friends" className="flex items-center gap-2">
               <Users className="h-4 w-4" />
               Friends
+            </TabsTrigger>
+            <TabsTrigger value="rooms" className="flex items-center gap-2">
+              <Home className="h-4 w-4" />
+              Rooms
+              {currentRoom && (
+                <Badge variant="default" className="ml-1 text-xs">
+                  1
+                </Badge>
+              )}
             </TabsTrigger>
             <TabsTrigger value="requests" className="flex items-center gap-2">
               <UserPlus className="h-4 w-4" />
@@ -464,6 +549,70 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
                 )}
               </div>
             </ScrollArea>
+          </TabsContent>
+
+          <TabsContent value="rooms" className="space-y-4">
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={loadCurrentRoom}>
+                🔄 Refresh
+              </Button>
+            </div>
+            
+            {isLoadingRoom ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <p className="text-sm">Loading room...</p>
+              </div>
+            ) : currentRoom ? (
+              <div className="space-y-2">
+                <div className="p-4 bg-secondary/20 rounded-lg border">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                      <h3 className="font-medium">Current Room</h3>
+                    </div>
+                    <Badge variant={currentRoom.status === 'waiting' ? 'secondary' : 'default'}>
+                      {currentRoom.status}
+                    </Badge>
+                  </div>
+                  
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Room Code:</span>
+                      <span className="font-mono font-medium">{currentRoom.room_code}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Game:</span>
+                      <span className="capitalize">{currentRoom.game_id}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Difficulty:</span>
+                      <span className="capitalize">{currentRoom.difficulty}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Players:</span>
+                      <span>{currentRoom.current_players}/{currentRoom.max_players}</span>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-4 pt-3 border-t">
+                    <Button 
+                      onClick={handleLeaveRoom}
+                      variant="destructive"
+                      size="sm"
+                      className="w-full"
+                      disabled={isLoadingRoom}
+                    >
+                      Leave Room
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <p className="text-sm">You're not in any room</p>
+                <p className="text-xs">Join or create a room to play with friends</p>
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="requests" className="space-y-4">
