@@ -490,16 +490,17 @@ serve(async (req) => {
         });
 
       case 'get_pending_invitations':
-        // Get pending join requests for the child
+        // Get pending join requests for the child using room_id foreign key
         const { data: pendingInvitations, error: invitationsError } = await supabase
           .from('join_requests')
           .select(`
             id,
             room_code,
+            room_id,
             player_name,
             player_avatar,
             created_at,
-            game_rooms!inner(game_id, difficulty, host_child_id, status)
+            game_rooms!join_requests_room_id_fkey(game_id, difficulty, host_child_id, status)
           `)
           .eq('child_id', child_id)
           .eq('status', 'pending')
