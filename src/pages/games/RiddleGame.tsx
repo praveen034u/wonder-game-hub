@@ -79,6 +79,11 @@ const RiddleGame = () => {
     
     setPlayers(newPlayers);
     
+    // Set room creator status if room code exists
+    if (roomCode) {
+      setIsRoomCreator(true);
+    }
+    
     // Start countdown
     let count = 3;
     const timer = setInterval(() => {
@@ -91,10 +96,12 @@ const RiddleGame = () => {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, []);
+  }, [roomCode]);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [showFeedback, setShowFeedback] = useState(false);
   const [countdown, setCountdown] = useState(3);
+  const [isRoomCreator, setIsRoomCreator] = useState(false);
+  const [pendingJoinRequests, setPendingJoinRequests] = useState(0);
 
   // Get riddles for selected category and difficulty
   const getCategoryRiddles = (category: string) => {
@@ -232,11 +239,29 @@ const RiddleGame = () => {
   };
 
   const handlePlayAgain = () => {
-    setGamePhase('setup');
+    setGamePhase('countdown');
     setCurrentRiddleIndex(0);
     setSelectedAnswer(null);
     setShowFeedback(false);
-    setPlayers([]);
+    setCountdown(3);
+    
+    // Reset scores but keep players
+    setPlayers(prev => prev.map(p => ({ ...p, score: 0 })));
+    
+    // Start countdown for new game
+    let count = 3;
+    const timer = setInterval(() => {
+      count--;
+      setCountdown(count);
+      if (count === 0) {
+        clearInterval(timer);
+        setGamePhase('playing');
+      }
+    }, 1000);
+  };
+
+  const handleJoinRequestUpdate = (requestCount: number) => {
+    setPendingJoinRequests(requestCount);
   };
 
 
@@ -358,6 +383,22 @@ const RiddleGame = () => {
   // Playing Phase  
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/20 via-secondary/20 to-accent/20 p-4">
+      {/* Join Request Notification Banner */}
+      {isRoomCreator && pendingJoinRequests > 0 && (
+        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50">
+          <Card className="bg-yellow-100 border-yellow-300 shadow-lg animate-pulse">
+            <CardContent className="py-3 px-4">
+              <div className="flex items-center space-x-2">
+                <span className="text-yellow-600 text-lg">🔔</span>
+                <span className="text-yellow-800 font-medium">
+                  {pendingJoinRequests} player{pendingJoinRequests > 1 ? 's' : ''} want{pendingJoinRequests === 1 ? 's' : ''} to join!
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {/* Player Panel - Always visible */}
       <GameRoomPanel 
         roomCode={roomCode} 
@@ -365,6 +406,7 @@ const RiddleGame = () => {
         onPlayerJoin={handlePlayerJoin}
         players={players}
         gameMode={roomCode ? 'multiplayer' : 'single'}
+        onJoinRequestUpdate={handleJoinRequestUpdate}
       />
       
       <div className="max-w-md mx-auto">
@@ -424,11 +466,22 @@ const RiddleGame = () => {
               ))}
             </div>
 
-            <div className="flex justify-center mt-6">
+            {/* Game Control Buttons */}
+            <div className="flex justify-center space-x-3 mt-6">
+              {isRoomCreator && roomCode && (
+                <Button
+                  onClick={handlePlayAgain}
+                  className="bg-green-500 hover:bg-green-600 text-white"
+                  size="sm"
+                >
+                  🔄 Restart Game
+                </Button>
+              )}
               <Button
                 onClick={() => navigate('/games')}
                 variant="outline"
                 className="border-pink-300 text-pink-700"
+                size="sm"
               >
                 ← Back to Games
               </Button>

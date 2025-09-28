@@ -29,9 +29,10 @@ interface GameRoomPanelProps {
   onPlayerJoin?: (player: Player) => void;
   players?: Player[];
   gameMode?: 'single' | 'multiplayer';
+  onJoinRequestUpdate?: (requestCount: number) => void;
 }
 
-const GameRoomPanel = ({ roomCode, gameId, onPlayerJoin, players: externalPlayers, gameMode = 'single' }: GameRoomPanelProps) => {
+const GameRoomPanel = ({ roomCode, gameId, onPlayerJoin, players: externalPlayers, gameMode = 'single', onJoinRequestUpdate }: GameRoomPanelProps) => {
   const { toast } = useToast();
   const [players, setPlayers] = useState<Player[]>([]);
   const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
@@ -63,7 +64,11 @@ const GameRoomPanel = ({ roomCode, gameId, onPlayerJoin, players: externalPlayer
           { event: 'INSERT', schema: 'public', table: 'join_requests' },
           (payload) => {
             const newRequest = payload.new as JoinRequest;
-            setJoinRequests(prev => [...prev, newRequest]);
+            setJoinRequests(prev => {
+              const updated = [...prev, newRequest];
+              onJoinRequestUpdate?.(updated.length);
+              return updated;
+            });
             setCurrentRequest(newRequest);
             setShowJoinRequest(true);
             
@@ -136,6 +141,7 @@ const GameRoomPanel = ({ roomCode, gameId, onPlayerJoin, players: externalPlayer
 
         if (requests) {
           setJoinRequests(requests as unknown as JoinRequest[]);
+          onJoinRequestUpdate?.(requests.length);
         }
       }
     } catch (error) {
@@ -171,7 +177,11 @@ const GameRoomPanel = ({ roomCode, gameId, onPlayerJoin, players: externalPlayer
           });
         }
         
-        setJoinRequests(prev => prev.filter(r => r.id !== requestId));
+        setJoinRequests(prev => {
+          const updated = prev.filter(r => r.id !== requestId);
+          onJoinRequestUpdate?.(updated.length);
+          return updated;
+        });
         setShowJoinRequest(false);
         setCurrentRequest(null);
       }
