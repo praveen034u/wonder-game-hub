@@ -98,8 +98,8 @@ serve(async (req) => {
             status,
             requester_id,
             addressee_id,
-            requester:children_profiles!friends_requester_id_fkey(id, name, avatar, in_room),
-            addressee:children_profiles!friends_addressee_id_fkey(id, name, avatar, in_room)
+            requester:children_profiles!friends_requester_id_fkey(id, name, avatar, room_id),
+            addressee:children_profiles!friends_addressee_id_fkey(id, name, avatar, room_id)
           `)
           .or(`requester_id.eq.${child_id},addressee_id.eq.${child_id}`)
           .eq('status', 'accepted');
@@ -114,8 +114,8 @@ serve(async (req) => {
             child_id: friendData?.id,
             name: friendData?.name,
             avatar: friendData?.avatar,
-            status: friendData?.in_room ? 'in-game' : 'online',
-            in_room: friendData?.in_room
+            status: friendData?.room_id ? 'in-game' : 'online',
+            room_id: friendData?.room_id
           };
         }) || [];
 
@@ -186,7 +186,7 @@ serve(async (req) => {
 
         const { data: specificFriends, error: specificFriendsError } = await supabase
           .from('children_profiles')
-          .select('id, name, avatar, in_room')
+          .select('id, name, avatar, room_id')
           .in('id', friend_ids);
 
         if (specificFriendsError) throw specificFriendsError;
@@ -194,7 +194,7 @@ serve(async (req) => {
         const friendsWithStatus = specificFriends?.map(friend => ({
           ...friend,
           child_id: friend.id,
-          status: friend.in_room ? 'in-game' : 'online'
+          status: friend.room_id ? 'in-game' : 'online'
         })) || [];
 
         return new Response(
@@ -206,15 +206,15 @@ serve(async (req) => {
         // List all children across all parents (service role bypasses RLS)
         const { data: allChildren, error: listError } = await supabase
           .from('children_profiles')
-          .select('id, name, avatar, updated_at, is_online, last_seen_at, in_room')
+          .select('id, name, avatar, updated_at, is_online, last_seen_at, room_id')
           .neq('id', child_id)
           .order('is_online', { ascending: false })
           .order('last_seen_at', { ascending: false });
 
-        // Transform children data to include status based on in_room flag
+        // Transform children data to include status based on room_id
         const childrenWithStatus = allChildren?.map(child => ({
           ...child,
-          status: child.in_room ? 'in-game' : (child.is_online ? 'online' : 'offline')
+          status: child.room_id ? 'in-game' : (child.is_online ? 'online' : 'offline')
         })) || [];
 
         return new Response(

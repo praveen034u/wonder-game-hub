@@ -27,7 +27,7 @@ interface Friend {
   avatar: string;
   status: 'online' | 'offline' | 'in-game';
   child_id: string;
-  in_room?: boolean;
+  room_id?: string | null;
 }
 
 interface RoomManagementModalProps {
@@ -64,12 +64,47 @@ const RoomManagementModal = ({ isOpen, onClose }: RoomManagementModalProps) => {
     if (!selectedChild) return;
 
     try {
-      // Check if child is in a room
+      // Check if child has a room_id in their profile (fallback to room_participants if column doesn't exist yet)
+      try {
+        const { data: childData, error } = await supabase
+          .from('children_profiles')
+          .select('room_id')
+          .eq('id', selectedChild.id)
+          .single();
+
+        if (!error && childData && (childData as any).room_id) {
+          // Get room details with creator information
+          const { data: roomData } = await supabase
+            .from('game_rooms')
+            .select(`
+              *,
+              host:children_profiles!game_rooms_host_child_id_fkey(name)
+            `)
+            .eq('id', (childData as any).room_id)
+            .single();
+
+          if (roomData) {
+            setCurrentRoom(roomData as GameRoom);
+            setRoomCode(roomData.room_code);
+            setActiveTab("room");
+            loadRoomParticipants(roomData.id);
+          }
+          return;
+        }
+      } catch (error) {
+        // Fallback to old method if room_id column doesn't exist yet
+        console.log('Falling back to room_participants check');
+      }
+
+      // Fallback: Check if child is in a room via room_participants
       const { data: roomParticipant } = await supabase
         .from('room_participants')
         .select(`
           room_id,
-          game_rooms(*)
+          game_rooms(
+            *,
+            host:children_profiles!game_rooms_host_child_id_fkey(name)
+          )
         `)
         .eq('child_id', selectedChild.id)
         .single();
@@ -136,7 +171,7 @@ const RoomManagementModal = ({ isOpen, onClose }: RoomManagementModalProps) => {
         name: f.name,
         avatar: f.avatar || '👤',
         status: f.status || 'offline',
-        in_room: f.in_room || false
+        room_id: f.room_id || null
       } as Friend));
 
       setFriends(friendsList);
@@ -258,11 +293,15 @@ const RoomManagementModal = ({ isOpen, onClose }: RoomManagementModalProps) => {
         setRoomCode("");
         setPlayers([]);
         setActiveTab("create");
-        // Update child's in_room status
-        await supabase
-          .from('children_profiles')
-          .update({ in_room: false })
-          .eq('id', selectedChild.id);
+        // Try to update child's room_id to null (gracefully handle if column doesn't exist yet)
+        try {
+          await supabase
+            .from('children_profiles')
+            .update({ room_id: null } as any)
+            .eq('id', selectedChild.id);
+        } catch (error) {
+          console.log('Could not update room_id (column may not exist yet)');
+        }
       } else {
         toast({
           title: "Error",
@@ -358,21 +397,21 @@ const RoomManagementModal = ({ isOpen, onClose }: RoomManagementModalProps) => {
                                 setSelectedFriendIds(prev => prev.filter(id => id !== friend.child_id));
                               }
                             }}
-                            disabled={friend.in_room}
+                            disabled={friend.room_id !== null}
                           />
                           <div className="flex items-center gap-2 flex-1">
                             <Avatar className="w-6 h-6">
                               <AvatarImage src={friend.avatar} />
                               <AvatarFallback>{friend.name?.[0] || '?'}</AvatarFallback>
                             </Avatar>
-                            <span className={`text-sm ${friend.in_room ? 'text-muted-foreground' : ''}`}>
+                            <span className={`text-sm ${friend.room_id ? 'text-muted-foreground' : ''}`}>
                               {friend.name}
                             </span>
                             <Badge variant={
-                              friend.in_room ? 'secondary' : 
+                              friend.room_id ? 'secondary' : 
                               friend.status === 'online' ? 'default' : 'outline'
                             } className="text-xs">
-                              {friend.in_room ? 'In Room' : friend.status}
+                              {friend.room_id ? 'In Room' : friend.status}
                             </Badge>
                           </div>
                         </div>
@@ -434,10 +473,15 @@ const RoomManagementModal = ({ isOpen, onClose }: RoomManagementModalProps) => {
             <TabsContent value="room" className="space-y-4">
               {currentRoom && (
                 <>
-                  <div className="text-center">
-                    <h3 className="text-lg font-semibold">Room: {roomCode}</h3>
+                  <div className="text-center p-4 bg-primary/10 rounded-lg mb-4">
+                    <p className="text-sm text-muted-foreground mb-2">
+                      You are currently in Room Code
+                    </p>
+                    <p className="text-2xl font-bold text-primary mb-2">
+                      {roomCode}
+                    </p>
                     <p className="text-sm text-muted-foreground">
-                      Share this code with friends to invite them!
+                      Created by <span className="font-semibold">{currentRoom.host?.name || 'Unknown'}</span>
                     </p>
                   </div>
 

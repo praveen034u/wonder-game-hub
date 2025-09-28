@@ -20,6 +20,9 @@ export interface GameRoom {
   ai_player_avatar?: string;
   created_at: string;
   updated_at: string;
+  host?: {
+    name: string;
+  };
 }
 
 export interface RoomParticipant {
