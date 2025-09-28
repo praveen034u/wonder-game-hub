@@ -54,6 +54,32 @@ serve(async (req) => {
 
     switch (action) {
       case 'create_room':
+        // Check if user is already in any active room
+        const { data: existingHosting } = await supabase
+          .from('room_participants')
+          .select(`
+            id,
+            room_id,
+            game_rooms!inner(
+              id,
+              status,
+              room_code
+            )
+          `)
+          .eq('child_id', child_id)
+          .in('game_rooms.status', ['waiting', 'playing']);
+
+        if (existingHosting && existingHosting.length > 0) {
+          const activeRoom = existingHosting[0].game_rooms[0];
+          return new Response(
+            JSON.stringify({ 
+              success: false, 
+              error: `You are already in room ${activeRoom.room_code}. Please leave that room first.` 
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
         const roomCode = generateRoomCode();
         const finalRoomName = room_name || `${game_id} Room`;
 
@@ -122,6 +148,32 @@ serve(async (req) => {
         );
 
       case 'join_room':
+        // Check if user is already in any active room
+        const { data: existingParticipation } = await supabase
+          .from('room_participants')
+          .select(`
+            id,
+            room_id,
+            game_rooms!inner(
+              id,
+              status,
+              room_code
+            )
+          `)
+          .eq('child_id', child_id)
+          .in('game_rooms.status', ['waiting', 'playing']);
+
+        if (existingParticipation && existingParticipation.length > 0) {
+          const activeRoom = existingParticipation[0].game_rooms[0];
+          return new Response(
+            JSON.stringify({ 
+              success: false, 
+              error: `You are already in room ${activeRoom.room_code}. Please leave that room first.` 
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
         // Find room by code
         const { data: room, error: findError } = await supabase
           .from('game_rooms')

@@ -7,6 +7,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Search, Users, UserPlus } from "lucide-react";
 import { useAppContext } from "@/contexts/Auth0Context";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -16,6 +18,22 @@ interface Player {
   name: string;
   avatar: string;
   isAI: boolean;
+}
+
+interface Friend {
+  id: string;
+  name: string;
+  avatar: string;
+  status: 'online' | 'offline' | 'in-game';
+  child_id: string;
+}
+
+interface OnlineUser {
+  id: string;
+  name: string;
+  avatar: string;
+  is_online: boolean;
+  status: 'online' | 'offline' | 'in-game';
 }
 
 interface GameRoomModalProps {
@@ -38,6 +56,14 @@ const GameRoomModal = ({ isOpen, onClose, gameId, difficulty, onStartGame, invit
   const [isJoining, setIsJoining] = useState(false);
   const [currentRoom, setCurrentRoom] = useState<any>(null);
   const [activeTab, setActiveTab] = useState("create");
+  
+  // Friend management states
+  const [friends, setFriends] = useState<Friend[]>([]);
+  const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
+  const [selectedFriendIds, setSelectedFriendIds] = useState<string[]>([]);
+  const [invitedFriends, setInvitedFriends] = useState<Friend[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isLoadingFriends, setIsLoadingFriends] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -48,8 +74,16 @@ const GameRoomModal = ({ isOpen, onClose, gameId, difficulty, onStartGame, invit
     }
     if (selectedChild) {
       initializeRoom();
+      loadFriendsAndUsers();
     }
   }, [isOpen, selectedChild, childrenProfiles, setSelectedChild]);
+
+  useEffect(() => {
+    if (invitedFriendIds.length > 0) {
+      setSelectedFriendIds(invitedFriendIds);
+      loadInvitedFriends();
+    }
+  }, [invitedFriendIds]);
 
   useEffect(() => {
     if (isOpen && childrenProfiles.length === 0) {
@@ -68,6 +102,68 @@ const GameRoomModal = ({ isOpen, onClose, gameId, difficulty, onStartGame, invit
     }]);
   };
 
+  const loadFriendsAndUsers = async () => {
+    if (!selectedChild?.id) return;
+
+    try {
+      setIsLoadingFriends(true);
+
+      // Load friends
+      const { data: friendsData } = await supabase.functions.invoke('manage-friends', {
+        body: {
+          action: 'list_friends',
+          child_id: selectedChild.id
+        }
+      });
+
+      if (friendsData?.success) {
+        setFriends(friendsData.data || []);
+      }
+
+      // Load online users
+      const { data: usersData } = await supabase.functions.invoke('manage-friends', {
+        body: {
+          action: 'list_all_children', 
+          child_id: selectedChild.id
+        }
+      });
+
+      if (usersData?.success) {
+        setOnlineUsers((usersData.data || []).sort((a: OnlineUser, b: OnlineUser) => {
+          if (a.status === 'online' && b.status !== 'online') return -1;
+          if (a.status !== 'online' && b.status === 'online') return 1;
+          if (a.status === 'in-game' && b.status === 'offline') return -1;
+          if (a.status === 'offline' && b.status === 'in-game') return 1;
+          return 0;
+        }));
+      }
+    } catch (error) {
+      console.error('Error loading friends and users:', error);
+    } finally {
+      setIsLoadingFriends(false);
+    }
+  };
+
+  const loadInvitedFriends = async () => {
+    if (!selectedChild?.id || invitedFriendIds.length === 0) return;
+
+    try {
+      const { data } = await supabase.functions.invoke('manage-friends', {
+        body: {
+          action: 'get_friends_by_ids',
+          child_id: selectedChild.id,
+          friend_ids: invitedFriendIds
+        }
+      });
+
+      if (data?.success) {
+        setInvitedFriends(data.data || []);
+      }
+    } catch (error) {
+      console.error('Error loading invited friends:', error);
+    }
+  };
+
   const createGameRoom = async () => {
     console.log('Create room clicked, selectedChild:', selectedChild, 'childrenProfiles:', childrenProfiles);
     const activeChild = selectedChild || childrenProfiles[0];
@@ -83,7 +179,9 @@ const GameRoomModal = ({ isOpen, onClose, gameId, difficulty, onStartGame, invit
     try {
       setIsCreating(true);
       
-      const friendIds = invitedFriendIds.filter(Boolean);
+      const allSelectedFriends = [...invitedFriendIds.filter(Boolean), ...selectedFriendIds];
+      const uniqueFriendIds = [...new Set(allSelectedFriends)];
+      
       const { data } = await supabase.functions.invoke('manage-game-rooms', {
         body: {
           action: 'create_room',
@@ -91,7 +189,7 @@ const GameRoomModal = ({ isOpen, onClose, gameId, difficulty, onStartGame, invit
           game_id: gameId,
           difficulty,
           room_name: customRoomName,
-          friend_ids: friendIds
+          friend_ids: uniqueFriendIds
         }
       });
 
@@ -122,16 +220,16 @@ const GameRoomModal = ({ isOpen, onClose, gameId, difficulty, onStartGame, invit
         });
 
         // Invite friends if any were selected
-        if (friendIds.length > 0) {
+        if (uniqueFriendIds.length > 0) {
           await supabase.functions.invoke('manage-game-rooms', {
             body: {
               action: 'invite_friends',
               room_id: room.id,
               child_id: activeChild.id,
-              friend_ids: friendIds
+              friend_ids: uniqueFriendIds
             }
           });
-          toast({ title: 'Invites Sent', description: `Invited ${friendIds.length} friend(s)` });
+          toast({ title: 'Invites Sent', description: `Invited ${uniqueFriendIds.length} friend(s)` });
         }
 
         setActiveTab("room");
@@ -289,6 +387,131 @@ const GameRoomModal = ({ isOpen, onClose, gameId, difficulty, onStartGame, invit
                     onChange={(e) => setCustomRoomName(e.target.value)}
                   />
                 </div>
+
+                {/* Invited Friends Display */}
+                {invitedFriends.length > 0 && (
+                  <Card>
+                    <CardContent className="p-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Users className="h-4 w-4" />
+                        <span className="text-sm font-medium">Invited Friends ({invitedFriends.length})</span>
+                      </div>
+                      <div className="space-y-2">
+                        {invitedFriends.map((friend) => (
+                          <div key={friend.id} className="flex items-center gap-2 text-sm">
+                            <Avatar className="w-6 h-6">
+                              <AvatarImage src={friend.avatar} />
+                              <AvatarFallback>{friend.name[0]}</AvatarFallback>
+                            </Avatar>
+                            <span>{friend.name}</span>
+                            <Badge variant={friend.status === 'online' ? 'default' : friend.status === 'in-game' ? 'secondary' : 'outline'} className="text-xs">
+                              {friend.status === 'in-game' ? 'In Game' : friend.status}
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Friend Selection */}
+                <Card>
+                  <CardContent className="p-3">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <UserPlus className="h-4 w-4" />
+                        <span className="text-sm font-medium">Add Friends</span>
+                      </div>
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        onClick={loadFriendsAndUsers}
+                        disabled={isLoadingFriends}
+                      >
+                        🔄
+                      </Button>
+                    </div>
+
+                    <div className="space-y-2 mb-3">
+                      <Input
+                        placeholder="Search friends..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="h-8"
+                      />
+                    </div>
+
+                    <div className="max-h-32 overflow-y-auto space-y-1">
+                      {friends.filter(friend => 
+                        friend.name.toLowerCase().includes(searchQuery.toLowerCase())
+                      ).map((friend) => (
+                        <div key={friend.id} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`friend-${friend.id}`}
+                            checked={selectedFriendIds.includes(friend.child_id)}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setSelectedFriendIds(prev => [...prev, friend.child_id]);
+                              } else {
+                                setSelectedFriendIds(prev => prev.filter(id => id !== friend.child_id));
+                              }
+                            }}
+                          />
+                          <div className="flex items-center gap-2 flex-1">
+                            <Avatar className="w-6 h-6">
+                              <AvatarImage src={friend.avatar} />
+                              <AvatarFallback>{friend.name[0]}</AvatarFallback>
+                            </Avatar>
+                            <span className="text-sm">{friend.name}</span>
+                            <Badge variant={friend.status === 'online' ? 'default' : friend.status === 'in-game' ? 'secondary' : 'outline'} className="text-xs">
+                              {friend.status === 'in-game' ? 'In Game' : friend.status}
+                            </Badge>
+                          </div>
+                        </div>
+                      ))}
+
+                      {/* Online Users */}
+                      {onlineUsers.filter(user => 
+                        user.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
+                        !friends.some(f => f.child_id === user.id) &&
+                        user.id !== selectedChild?.id
+                      ).map((user) => (
+                        <div key={user.id} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`user-${user.id}`}
+                            checked={selectedFriendIds.includes(user.id)}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setSelectedFriendIds(prev => [...prev, user.id]);
+                              } else {
+                                setSelectedFriendIds(prev => prev.filter(id => id !== user.id));
+                              }
+                            }}
+                            disabled={user.status === 'in-game'}
+                          />
+                          <div className="flex items-center gap-2 flex-1">
+                            <Avatar className="w-6 h-6">
+                              <AvatarImage src={user.avatar} />
+                              <AvatarFallback>{user.name[0]}</AvatarFallback>
+                            </Avatar>
+                            <span className={`text-sm ${user.status === 'in-game' ? 'text-muted-foreground' : ''}`}>
+                              {user.name}
+                            </span>
+                            <Badge variant={user.status === 'online' ? 'default' : user.status === 'in-game' ? 'secondary' : 'outline'} className="text-xs">
+                              {user.status === 'in-game' ? 'In Game' : user.status}
+                            </Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {selectedFriendIds.length > 0 && (
+                      <div className="text-xs text-muted-foreground mt-2">
+                        {selectedFriendIds.length} friend(s) selected to invite
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
 
                 <Button 
                   onClick={createGameRoom} 
