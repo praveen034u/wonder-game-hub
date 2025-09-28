@@ -6,10 +6,11 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useAppContext } from "@/contexts/Auth0Context";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Search } from "lucide-react";
+import { Search, Users, UserPlus } from "lucide-react";
 
 interface Friend {
   id: string;
@@ -44,7 +45,7 @@ interface OnlineUser {
 }
 
 interface FriendsPanelProps {
-  onInviteFriend: (friendId: string) => void;
+  onInviteFriend: (friendIds: string[]) => void;
 }
 
 const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
@@ -57,6 +58,7 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
+  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [isLoadingOnlineUsers, setIsLoadingOnlineUsers] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
 
@@ -304,7 +306,20 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
     }
   };
 
-  // Debounced search
+  const toggleUserSelection = (userId: string) => {
+    setSelectedUsers(prev => 
+      prev.includes(userId) 
+        ? prev.filter(id => id !== userId)
+        : [...prev, userId]
+    );
+  };
+
+  const handleInviteSelected = () => {
+    if (selectedUsers.length > 0) {
+      onInviteFriend(selectedUsers);
+      setSelectedUsers([]);
+    }
+  };
   useEffect(() => {
     const timer = setTimeout(() => {
       searchChildren();
@@ -334,18 +349,41 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
       </CardHeader>
       <CardContent className="space-y-4 h-full">
         <Tabs defaultValue="friends" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="friends">Friends</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="friends" className="flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              Friends
+            </TabsTrigger>
+            <TabsTrigger value="requests" className="flex items-center gap-2">
+              <UserPlus className="h-4 w-4" />
+              Requests
+              {friendRequests.length > 0 && (
+                <Badge variant="destructive" className="ml-1 text-xs">
+                  {friendRequests.length}
+                </Badge>
+              )}
+            </TabsTrigger>
             <TabsTrigger value="search" className="flex items-center gap-2">
               <Search className="h-4 w-4" />
-              Search Users
-              <Badge variant="secondary" className="ml-1 text-xs">
-                {onlineUsers.length}
-              </Badge>
+              Search
             </TabsTrigger>
           </TabsList>
           
           <TabsContent value="friends" className="space-y-4">
+            {selectedUsers.length > 0 && (
+              <div className="flex items-center justify-between bg-secondary/20 rounded-lg p-3">
+                <span className="text-sm font-medium">{selectedUsers.length} selected</span>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={() => setSelectedUsers([])}>
+                    Clear
+                  </Button>
+                  <Button size="sm" onClick={handleInviteSelected}>
+                    Invite to Game
+                  </Button>
+                </div>
+              </div>
+            )}
+            
             <ScrollArea className="h-60">
               <div className="space-y-2">
                 {friends.map((friend) => (
@@ -354,6 +392,12 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
                     className="flex items-center justify-between p-3 bg-secondary/20 rounded-lg"
                   >
                     <div className="flex items-center gap-3">
+                      {friend.status === 'online' && (
+                        <Checkbox
+                          checked={selectedUsers.includes(friend.child_id)}
+                          onCheckedChange={() => toggleUserSelection(friend.child_id)}
+                        />
+                      )}
                       <div className="relative">
                         <Avatar className="w-8 h-8">
                           <AvatarImage src={friend.avatar} />
@@ -368,16 +412,6 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
                         <p className="text-xs text-muted-foreground capitalize">{friend.status}</p>
                       </div>
                     </div>
-                    
-                    {friend.status === 'online' && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => onInviteFriend(friend.child_id)}
-                      >
-                        Invite
-                      </Button>
-                    )}
                   </div>
                 ))}
                 
@@ -385,6 +419,55 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
                   <div className="text-center py-8 text-muted-foreground">
                     <p className="text-sm">No friends yet!</p>
                     <p className="text-xs">Search and add friends to play together</p>
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          </TabsContent>
+
+          <TabsContent value="requests" className="space-y-4">
+            <ScrollArea className="h-60">
+              <div className="space-y-2">
+                {friendRequests.map((request) => (
+                  <div
+                    key={request.id}
+                    className="flex items-center justify-between p-3 bg-secondary/20 rounded-lg"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Avatar className="w-8 h-8">
+                        <AvatarImage src={request.requester.avatar} />
+                        <AvatarFallback>{request.requester.name[0]}</AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="font-medium text-sm">{request.requester.name}</p>
+                        <p className="text-xs text-muted-foreground">Wants to be friends</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => handleFriendRequest(request.id, 'accept')}
+                        disabled={isLoading}
+                      >
+                        Accept
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleFriendRequest(request.id, 'decline')}
+                        disabled={isLoading}
+                      >
+                        Decline
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+                
+                {friendRequests.length === 0 && (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <p className="text-sm">No friend requests</p>
+                    <p className="text-xs">Friend requests will appear here</p>
                   </div>
                 )}
               </div>
@@ -403,6 +486,20 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
                 🔄 Refresh
               </Button>
             </div>
+
+            {selectedUsers.length > 0 && (
+              <div className="flex items-center justify-between bg-secondary/20 rounded-lg p-3">
+                <span className="text-sm font-medium">{selectedUsers.length} selected</span>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={() => setSelectedUsers([])}>
+                    Clear
+                  </Button>
+                  <Button size="sm" onClick={handleInviteSelected}>
+                    Invite to Game
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {showSearch ? (
               <>
@@ -482,6 +579,12 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
                         className={`flex items-center justify-between p-3 rounded-lg border ${bgClass}`}
                       >
                         <div className="flex items-center gap-3">
+                          {isOnline && (
+                            <Checkbox
+                              checked={selectedUsers.includes(user.id)}
+                              onCheckedChange={() => toggleUserSelection(user.id)}
+                            />
+                          )}
                           <div className="relative">
                             <Avatar className="w-8 h-8">
                               <AvatarImage src={user.avatar} />
@@ -501,11 +604,11 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
                         
                         <Button
                           size="sm"
-                          onClick={() => onInviteFriend(user.id)}
-                          variant={isOnline ? "default" : "outline"}
-                          disabled={!isOnline}
+                          onClick={() => sendFriendRequest(user.id)}
+                          variant="outline"
+                          disabled={isLoading}
                         >
-                          {isOnline ? 'Invite to Game' : 'Offline'}
+                          Add Friend
                         </Button>
                       </div>
                     );

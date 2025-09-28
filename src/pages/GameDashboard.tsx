@@ -37,9 +37,9 @@ const GameDashboard = () => {
     }
   };
 
-  const handleInviteFriend = (friendId: string) => {
-    // Logic to invite friend to current game
-    console.log('Inviting friend:', friendId);
+  const handleInviteFriend = (friendIds: string[]) => {
+    // Logic to invite friends to current game
+    console.log('Inviting friends:', friendIds);
   };
 
   return (
