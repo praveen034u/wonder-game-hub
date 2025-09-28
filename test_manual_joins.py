@@ -29,18 +29,6 @@ def test_manual_joins():
     print("🎯 Testing manual joins in game rooms functions...")
     print("=" * 60)
     
-    # Step 0: Clean up - leave any existing rooms first
-    print("\n0️⃣ Cleaning up existing rooms...")
-    for child_id in [host_child_id, friend_child_id]:
-        # Try to leave room (we don't have the room_id, so this might fail, but that's OK)
-        cleanup_data = {
-            'action': 'leave_room',
-            'child_id': child_id,
-            'room_id': str(uuid.uuid4())  # Dummy room ID, will fail but might clean up profile
-        }
-        response = requests.post(rooms_url, json=cleanup_data, headers=headers)
-        print(f"Cleanup for {child_id}: {response.status_code}")
-    
     # Step 1: Create a room
     print("\n1️⃣ Creating game room...")
     create_data = {
