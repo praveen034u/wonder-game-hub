@@ -144,9 +144,10 @@ serve(async (req) => {
         // List all children across all parents (service role bypasses RLS)
         const { data: allChildren, error: listError } = await supabase
           .from('children_profiles')
-          .select('id, name, avatar, updated_at')
+          .select('id, name, avatar, updated_at, is_online, last_seen_at')
           .neq('id', child_id)
-          .order('updated_at', { ascending: false });
+          .order('is_online', { ascending: false })
+          .order('last_seen_at', { ascending: false });
 
         if (listError) throw listError;
 

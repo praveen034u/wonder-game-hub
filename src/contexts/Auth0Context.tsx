@@ -86,6 +86,20 @@ export const AppContextProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const updateChildOnlineStatus = async (childId: string, isOnline: boolean) => {
+    try {
+      await supabase.functions.invoke('manage-profiles', {
+        body: {
+          action: 'set_child_online_status',
+          child_id: childId,
+          profile_data: { is_online: isOnline }
+        }
+      });
+    } catch (error) {
+      console.error('Error updating child online status:', error);
+    }
+  };
+
   const refreshProfiles = async () => {
     if (!isAuthenticated || !user?.sub) return;
     
@@ -125,6 +139,12 @@ export const AppContextProvider = ({ children }: { children: ReactNode }) => {
         } else {
           const childrenData = (childrenResp?.data || []) as ChildProfile[];
           setChildrenProfiles(childrenData);
+          
+          // Set all children as online when parent logs in
+          for (const child of childrenData) {
+            updateChildOnlineStatus(child.id, true);
+          }
+          
           // Auto-select the first child if none is selected and we have children
           if (childrenData.length > 0 && !selectedChild) {
             setSelectedChild(childrenData[0]);
@@ -173,6 +193,16 @@ export const AppContextProvider = ({ children }: { children: ReactNode }) => {
       setIsLoadingProfiles(false);
     }
   };
+
+  // Handle logout - set all children offline
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated && childrenProfiles.length > 0) {
+      // Set all children offline when parent logs out
+      childrenProfiles.forEach(child => {
+        updateChildOnlineStatus(child.id, false);
+      });
+    }
+  }, [isAuthenticated, isLoading, childrenProfiles]);
 
   useEffect(() => {
     if (!isLoading && isAuthenticated && user?.sub) {

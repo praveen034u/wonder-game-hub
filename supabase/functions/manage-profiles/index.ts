@@ -24,7 +24,7 @@ serve(async (req) => {
     }
 
     const { method, url } = req;
-    const { action, auth0_user_id, profile_data } = await req.json();
+    const { action, auth0_user_id, profile_data, child_id } = await req.json();
 
     // Set the Auth0 user ID for RLS policies
     await supabaseClient.rpc('set_config', {
@@ -156,6 +156,26 @@ serve(async (req) => {
       return new Response(JSON.stringify({ success: true, data }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+
+    if (action === 'set_child_online_status') {
+      // Update child's online status
+      const { data: statusUpdate, error: statusError } = await supabaseClient
+        .from('children_profiles')
+        .update({ 
+          is_online: profile_data.is_online,
+          last_seen_at: new Date().toISOString()
+        })
+        .eq('id', child_id)
+        .select()
+        .single();
+
+      if (statusError) throw statusError;
+
+      return new Response(
+        JSON.stringify({ success: true, data: statusUpdate }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     return new Response(JSON.stringify({ error: 'Invalid action' }), {

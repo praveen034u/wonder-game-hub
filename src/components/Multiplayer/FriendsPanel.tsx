@@ -140,12 +140,17 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
       const thirtyMinutesAgo = new Date(now.getTime() - 30 * 60 * 1000);
 
       const onlineUsersList: OnlineUser[] = (data.data || []).map((child: any) => {
-        const lastSeen = new Date(child.updated_at);
+        // Use database online status if available, otherwise fall back to time-based status
         let status: 'online' | 'in-game' | 'offline' = 'offline';
-        if (lastSeen > fiveMinutesAgo) {
+        
+        if (child.is_online) {
           status = 'online';
-        } else if (lastSeen > thirtyMinutesAgo) {
-          status = 'online';
+        } else {
+          // Fallback to time-based status
+          const lastSeen = new Date(child.last_seen_at || child.updated_at);
+          if (lastSeen > fiveMinutesAgo) {
+            status = 'online';
+          }
         }
 
         return {
@@ -153,7 +158,7 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
           name: child.name,
           avatar: child.avatar || '👤',
           status,
-          last_seen: child.updated_at
+          last_seen: child.last_seen_at || child.updated_at
         };
       });
 
