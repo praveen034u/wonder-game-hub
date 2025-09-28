@@ -25,7 +25,7 @@ const Profile = () => {
   const [name, setName] = useState('');
   const [ageGroup, setAgeGroup] = useState<string>('');
   const [avatar, setAvatar] = useState('🦄');
-  const [isEditing, setIsEditing] = useState(!selectedChild);
+  const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -33,8 +33,13 @@ const Profile = () => {
       setName(selectedChild.name);
       setAgeGroup(selectedChild.age_group);
       setAvatar(selectedChild.avatar || '🦄');
+    } else {
+      // If no children exist, go straight to editing mode
+      if (!childrenProfiles || childrenProfiles.length === 0) {
+        setIsEditing(true);
+      }
     }
-  }, [selectedChild]);
+  }, [selectedChild, childrenProfiles]);
 
   const handleSave = async () => {
     if (!user?.sub || !name.trim() || !ageGroup || !parentProfile) return;
@@ -52,7 +57,7 @@ const Profile = () => {
         body: {
           action: selectedChild ? 'update_child' : 'create_child',
           auth0_user_id: user.sub,
-          profile_data: selectedChild ? { ...profileData, id: selectedChild.id } : profileData
+          profile_data: selectedChild ? { ...profileData, child_id: selectedChild.id } : profileData
         }
       });
 
@@ -87,7 +92,7 @@ const Profile = () => {
       
       <div className="container mx-auto px-4 py-6 max-w-2xl">
         {/* Existing Children List */}
-        {!isEditing && childrenProfiles.length > 0 && (
+        {!isEditing && childrenProfiles && childrenProfiles.length > 0 && (
           <Card className="shadow-soft">
             <CardHeader>
               <CardTitle className="font-fredoka text-center">My Children</CardTitle>
@@ -149,114 +154,91 @@ const Profile = () => {
           </Card>
         )}
 
-        <Card className="shadow-soft">
-          <CardHeader className="text-center">
-            <div className="w-20 h-20 mx-auto bg-gradient-primary rounded-full flex items-center justify-center text-4xl shadow-soft">
-              {avatar}
-            </div>
-            <CardTitle className="font-fredoka">
-              {isEditing ? (selectedChild ? 'Edit Profile' : 'Add New Child') : `Hello, ${name}! 👋`}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {isEditing ? (
-              <>
-                <div className="space-y-2">
-                  <Label className="font-comic font-bold">Child's Name</Label>
-                  <Input
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Enter name"
-                    className="h-12 text-lg font-comic rounded-xl"
-                  />
-                </div>
+        {/* Profile Creation/Editing Form */}
+        {(isEditing || !childrenProfiles || childrenProfiles.length === 0) && (
+          <Card className="shadow-soft">
+            <CardHeader className="text-center">
+              <div className="w-20 h-20 mx-auto bg-gradient-primary rounded-full flex items-center justify-center text-4xl shadow-soft">
+                {avatar}
+              </div>
+              <CardTitle className="font-fredoka">
+                {isEditing ? (selectedChild ? 'Edit Profile' : 'Add New Child') : 'Create Child Profile'}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-2">
+                <Label className="font-comic font-bold">Child's Name</Label>
+                <Input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Enter name"
+                  className="h-12 text-lg font-comic rounded-xl"
+                />
+              </div>
 
-                <div className="space-y-2">
-                  <Label className="font-comic font-bold">Age Group</Label>
-                  <Select value={ageGroup} onValueChange={setAgeGroup}>
-                    <SelectTrigger className="h-12 text-lg font-comic rounded-xl">
-                      <SelectValue placeholder="Select age group" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {AGE_GROUPS.map(group => (
-                        <SelectItem key={group.value} value={group.value}>
-                          {group.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="font-comic font-bold">Choose Avatar</Label>
-                  <div className="grid grid-cols-4 gap-3">
-                    {AVATARS.map(emoji => (
-                      <button
-                        key={emoji}
-                        type="button"
-                        onClick={() => setAvatar(emoji)}
-                        className={`w-12 h-12 text-2xl rounded-xl border-2 transition-all ${
-                          avatar === emoji 
-                            ? 'border-primary bg-primary/10 scale-110' 
-                            : 'border-border hover:border-primary/50'
-                        }`}
-                      >
-                        {emoji}
-                      </button>
+              <div className="space-y-2">
+                <Label className="font-comic font-bold">Age Group</Label>
+                <Select value={ageGroup} onValueChange={setAgeGroup}>
+                  <SelectTrigger className="h-12 text-lg font-comic rounded-xl">
+                    <SelectValue placeholder="Select age group" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {AGE_GROUPS.map(group => (
+                      <SelectItem key={group.value} value={group.value}>
+                        {group.label}
+                      </SelectItem>
                     ))}
-                  </div>
-                </div>
+                  </SelectContent>
+                </Select>
+              </div>
 
-                <div className="flex gap-3">
-                  <Button 
-                    variant="fun" 
-                    size="kid" 
-                    className="flex-1"
-                    onClick={handleSave}
-                    disabled={!name.trim() || !ageGroup || isLoading}
-                  >
-                    {isLoading ? '💾 Saving...' : (selectedChild ? '💾 Save Changes' : '🚀 Create Profile')}
-                  </Button>
-                  {childrenProfiles.length > 0 && (
-                    <Button 
-                      variant="outline"
-                      onClick={() => {
-                        setIsEditing(false);
-                        if (!selectedChild && childrenProfiles.length > 0) {
-                          setSelectedChild(childrenProfiles[0]);
-                        }
-                      }}
+              <div className="space-y-2">
+                <Label className="font-comic font-bold">Choose Avatar</Label>
+                <div className="grid grid-cols-4 gap-3">
+                  {AVATARS.map(emoji => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      onClick={() => setAvatar(emoji)}
+                      className={`w-12 h-12 text-2xl rounded-xl border-2 transition-all ${
+                        avatar === emoji 
+                          ? 'border-primary bg-primary/10 scale-110' 
+                          : 'border-border hover:border-primary/50'
+                      }`}
                     >
-                      Cancel
-                    </Button>
-                  )}
-                </div>
-              </>
-            ) : selectedChild && (
-              <div className="space-y-4 text-center">
-                <p className="font-comic text-lg">Ready for more adventures?</p>
-                <div className="space-y-3">
-                  <Button 
-                    variant="fun" 
-                    size="kid" 
-                    className="w-full"
-                    onClick={() => navigate('/modes')}
-                  >
-                    🎮 Play Games & Stories
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    size="default"
-                    onClick={() => setIsEditing(true)}
-                  >
-                    <User className="w-4 h-4 mr-2" />
-                    Edit Profile
-                  </Button>
+                      {emoji}
+                    </button>
+                  ))}
                 </div>
               </div>
-            )}
-          </CardContent>
-        </Card>
+
+              <div className="flex gap-3">
+                <Button 
+                  variant="fun" 
+                  size="kid" 
+                  className="flex-1"
+                  onClick={handleSave}
+                  disabled={!name.trim() || !ageGroup || isLoading}
+                >
+                  {isLoading ? '💾 Saving...' : (selectedChild ? '💾 Save Changes' : '🚀 Create Profile')}
+                </Button>
+                {childrenProfiles && childrenProfiles.length > 0 && (
+                  <Button 
+                    variant="outline"
+                    onClick={() => {
+                      setIsEditing(false);
+                      if (!selectedChild && childrenProfiles.length > 0) {
+                        setSelectedChild(childrenProfiles[0]);
+                      }
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );

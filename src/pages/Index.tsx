@@ -5,10 +5,15 @@ import { useAppAuth, useAppContext } from "@/contexts/Auth0Context";
 const Index = () => {
   const navigate = useNavigate();
   const { isAuthenticated, isLoading } = useAppAuth();
-  const { parentProfile, childrenProfiles } = useAppContext();
+  const { parentProfile, childrenProfiles, isLoadingProfiles } = useAppContext();
 
   useEffect(() => {
-    if (isLoading) return;
+    if (isLoading || isLoadingProfiles) return;
+
+    if (!isAuthenticated) {
+      navigate('/auth', { replace: true });
+      return;
+    }
 
     // Check if user has completed parent setup
     if (!parentProfile) {
@@ -24,9 +29,9 @@ const Index = () => {
 
     // If child profiles exist, redirect to game selection (modes)
     navigate('/modes', { replace: true });
-  }, [childrenProfiles, parentProfile, isLoading, navigate]);
+  }, [childrenProfiles, parentProfile, isLoading, isLoadingProfiles, isAuthenticated, navigate]);
 
-  if (isLoading) {
+  if (isLoading || isLoadingProfiles) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/20 to-secondary/20">
         <div className="text-2xl font-fredoka text-primary">Loading... 🎮</div>
