@@ -56,7 +56,7 @@ class SupabaseTestSuite:
             print("\n=== Testing Friends Function Connectivity ===")
             list_data = {
                 'action': 'list_friends',
-                'child_id': 'non-existent-id'  # This should return empty list, not error
+                'child_id': str(uuid.uuid4())  # Use proper UUID format
             }
             
             response = requests.post(friends_url, json=list_data, headers=self.headers)
