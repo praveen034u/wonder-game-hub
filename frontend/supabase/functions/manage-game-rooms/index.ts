@@ -496,8 +496,8 @@ serve(async (req) => {
         });
 
       case 'get_pending_invitations':
-        // Get pending join requests for the child and manually join with game_rooms
-        const { data: joinRequests, error: requestsError } = await supabase
+        // Use service role client to bypass RLS issues
+        const { data: joinRequests, error: requestsError } = await supabaseServiceRole
           .from('join_requests')
           .select(`
             id,
@@ -514,7 +514,7 @@ serve(async (req) => {
         // Manually join with game_rooms data
         const pendingInvitations = [];
         for (const request of joinRequests || []) {
-          const { data: gameRoom } = await supabase
+          const { data: gameRoom } = await supabaseServiceRole
             .from('game_rooms')
             .select('game_id, difficulty, host_child_id, status')
             .eq('room_code', request.room_code)
