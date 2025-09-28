@@ -321,7 +321,7 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="friends">Friends</TabsTrigger>
             <TabsTrigger value="search">
-              Find New Friends
+              Online Users
               <Badge variant="secondary" className="ml-1 text-xs">
                 {onlineUsers.length}
               </Badge>
