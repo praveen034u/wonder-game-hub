@@ -200,6 +200,39 @@ export type Database = {
           },
         ]
       }
+      join_requests: {
+        Row: {
+          child_id: string
+          created_at: string
+          id: string
+          player_avatar: string | null
+          player_name: string
+          room_code: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          child_id: string
+          created_at?: string
+          id?: string
+          player_avatar?: string | null
+          player_name: string
+          room_code: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          child_id?: string
+          created_at?: string
+          id?: string
+          player_avatar?: string | null
+          player_name?: string
+          room_code?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       multiplayer_game_sessions: {
         Row: {
           created_at: string

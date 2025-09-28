@@ -445,6 +445,150 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
 
+      case 'get_pending_invitations':
+        // Get pending join requests for the child
+        const { data: pendingInvitations, error: invitationsError } = await supabase
+          .from('join_requests')
+          .select(`
+            id,
+            room_code,
+            player_name,
+            player_avatar,
+            created_at,
+            game_rooms!inner(game_id, difficulty, host_child_id, status)
+          `)
+          .eq('child_id', child_id)
+          .eq('status', 'pending')
+          .eq('game_rooms.status', 'waiting');
+
+        if (invitationsError) throw invitationsError;
+
+        return new Response(
+          JSON.stringify({ success: true, data: pendingInvitations || [] }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+
+      case 'accept_invitation':
+        const { invitation_id } = await req.json();
+        
+        // Get the invitation details
+        const { data: invitation } = await supabase
+          .from('join_requests')
+          .select(`
+            *,
+            game_rooms!inner(*)
+          `)
+          .eq('id', invitation_id)
+          .eq('child_id', child_id)
+          .eq('status', 'pending')
+          .single();
+
+        if (!invitation) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'Invitation not found or already processed' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Check if user is already in a room
+        const { data: userRoomStatus } = await supabase
+          .from('children_profiles')
+          .select('in_room')
+          .eq('id', child_id)
+          .single();
+
+        if (userRoomStatus?.in_room) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'You are already in a room' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const roomData = invitation.game_rooms;
+        
+        // Check if room has space
+        if (roomData.current_players >= roomData.max_players) {
+          // Update invitation status to denied
+          await supabase
+            .from('join_requests')
+            .update({ status: 'denied' })
+            .eq('id', invitation_id);
+
+          return new Response(
+            JSON.stringify({ success: false, error: 'Room is full' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Add player to room
+        const { data: newParticipant } = await supabase
+          .from('room_participants')
+          .insert({
+            room_id: roomData.id,
+            child_id: child_id,
+            player_name: invitation.player_name,
+            player_avatar: invitation.player_avatar,
+            is_ai: false
+          })
+          .select()
+          .single();
+
+        // Set player as in_room
+        await supabase
+          .from('children_profiles')
+          .update({ in_room: true })
+          .eq('id', child_id);
+
+        // Update room player count
+        await supabase
+          .from('game_rooms')
+          .update({ current_players: roomData.current_players + 1 })
+          .eq('id', roomData.id);
+
+        // Update invitation status to approved
+        await supabase
+          .from('join_requests')
+          .update({ status: 'approved' })
+          .eq('id', invitation_id);
+
+        // Deny all other pending invitations for this user
+        await supabase
+          .from('join_requests')
+          .update({ status: 'denied' })
+          .eq('child_id', child_id)
+          .eq('status', 'pending')
+          .neq('id', invitation_id);
+
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            data: { 
+              room_id: roomData.id,
+              room_code: roomData.room_code,
+              participant: newParticipant 
+            }
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+
+      case 'decline_invitation':
+        const { invitation_id: declineId } = await req.json();
+        
+        // Update invitation status to denied
+        const { error: declineError } = await supabase
+          .from('join_requests')
+          .update({ status: 'denied' })
+          .eq('id', declineId)
+          .eq('child_id', child_id)
+          .eq('status', 'pending');
+
+        if (declineError) throw declineError;
+
+        return new Response(
+          JSON.stringify({ success: true }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+
       default:
         throw new Error('Invalid action');
     }
