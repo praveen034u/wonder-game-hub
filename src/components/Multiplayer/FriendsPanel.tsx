@@ -38,7 +38,7 @@ interface OnlineUser {
   id: string;
   name: string;
   avatar: string;
-  status: 'online' | 'in-game';
+  status: 'online' | 'in-game' | 'offline';
   last_seen?: string;
 }
 
@@ -126,26 +126,37 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
     try {
       setIsLoadingOnlineUsers(true);
       
-      // Get recently active children (within last 30 minutes)
-      const thirtyMinutesAgo = new Date();
-      thirtyMinutesAgo.setMinutes(thirtyMinutesAgo.getMinutes() - 30);
-      
-      const { data: activeChildren, error } = await supabase
+      // Get all children except current child
+      const { data: allChildren, error } = await supabase
         .from('children_profiles')
         .select('id, name, avatar, updated_at')
         .neq('id', selectedChild.id) // Exclude current child
-        .gte('updated_at', thirtyMinutesAgo.toISOString())
         .order('updated_at', { ascending: false });
 
       if (error) throw error;
 
-      const onlineUsersList: OnlineUser[] = (activeChildren || []).map(child => ({
-        id: child.id,
-        name: child.name,
-        avatar: child.avatar || '👤',
-        status: 'online' as const,
-        last_seen: child.updated_at
-      }));
+      const now = new Date();
+      const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
+      const thirtyMinutesAgo = new Date(now.getTime() - 30 * 60 * 1000);
+
+      const onlineUsersList: OnlineUser[] = (allChildren || []).map(child => {
+        const lastSeen = new Date(child.updated_at);
+        let status: 'online' | 'in-game' | 'offline' = 'offline';
+        
+        if (lastSeen > fiveMinutesAgo) {
+          status = 'online';
+        } else if (lastSeen > thirtyMinutesAgo) {
+          status = 'online'; // Still consider as online if within 30 minutes
+        }
+        
+        return {
+          id: child.id,
+          name: child.name,
+          avatar: child.avatar || '👤',
+          status,
+          last_seen: child.updated_at
+        };
+      });
 
       setOnlineUsers(onlineUsersList);
     } catch (error) {
@@ -321,7 +332,7 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="friends">Friends</TabsTrigger>
             <TabsTrigger value="search">
-              Online Users
+              Find New Friends
               <Badge variant="secondary" className="ml-1 text-xs">
                 {onlineUsers.length}
               </Badge>
@@ -463,39 +474,49 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
                     </div>
                   )}
                   
-                  {!isLoadingOnlineUsers && onlineUsers.map((user) => (
-                    <div
-                      key={user.id}
-                      className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="relative">
-                          <Avatar className="w-8 h-8">
-                            <AvatarImage src={user.avatar} />
-                            <AvatarFallback>{user.name[0]}</AvatarFallback>
-                          </Avatar>
-                          <div className="absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-background bg-green-500" />
-                        </div>
-                        <div>
-                          <p className="font-medium text-sm">{user.name}</p>
-                          <p className="text-xs text-muted-foreground">Online now</p>
-                        </div>
-                      </div>
-                      
-                      <Button
-                        size="sm"
-                        onClick={() => onInviteFriend(user.id)}
-                        className="bg-primary hover:bg-primary/90"
+                  {!isLoadingOnlineUsers && onlineUsers.map((user) => {
+                    const isOnline = user.status === 'online';
+                    const bgClass = isOnline ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' : 'bg-secondary/20 border-border';
+                    
+                    return (
+                      <div
+                        key={user.id}
+                        className={`flex items-center justify-between p-3 rounded-lg border ${bgClass}`}
                       >
-                        Invite to Game
-                      </Button>
-                    </div>
-                  ))}
+                        <div className="flex items-center gap-3">
+                          <div className="relative">
+                            <Avatar className="w-8 h-8">
+                              <AvatarImage src={user.avatar} />
+                              <AvatarFallback>{user.name[0]}</AvatarFallback>
+                            </Avatar>
+                            <div 
+                              className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-background ${getStatusColor(user.status)}`}
+                            />
+                          </div>
+                          <div>
+                            <p className="font-medium text-sm">{user.name}</p>
+                            <p className="text-xs text-muted-foreground capitalize">
+                              {user.status === 'online' ? 'Online' : 'Offline'}
+                            </p>
+                          </div>
+                        </div>
+                        
+                        <Button
+                          size="sm"
+                          onClick={() => onInviteFriend(user.id)}
+                          variant={isOnline ? "default" : "outline"}
+                          disabled={!isOnline}
+                        >
+                          {isOnline ? 'Invite to Game' : 'Offline'}
+                        </Button>
+                      </div>
+                    );
+                  })}
                   
                   {!isLoadingOnlineUsers && onlineUsers.length === 0 && (
                     <div className="text-center py-8 text-muted-foreground">
-                      <p className="text-sm">No users are currently online</p>
-                      <p className="text-xs">Users who have been active in the last 30 minutes will appear here</p>
+                      <p className="text-sm">No other users found</p>
+                      <p className="text-xs">Other users will appear here when they're active</p>
                     </div>
                   )}
                 </div>
