@@ -68,8 +68,8 @@ const Profile = () => {
       setIsEditing(false);
       
       if (!selectedChild) {
-        // First time profile creation - redirect to parent setup
-        navigate('/parent-setup');
+        // First time profile creation - redirect to modes
+        navigate('/modes');
       }
     } catch (error) {
       console.error('Error saving profile:', error);
@@ -86,14 +86,77 @@ const Profile = () => {
         <LogoutButton />
       </div>
 
-      <div className="max-w-md mx-auto">
+      <div className="max-w-2xl mx-auto space-y-6">
+        {/* Existing Children List */}
+        {!isEditing && childrenProfiles.length > 0 && (
+          <Card className="shadow-soft">
+            <CardHeader>
+              <CardTitle className="font-fredoka text-center">My Children</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 md:grid-cols-2">
+                {childrenProfiles.map(child => (
+                  <div 
+                    key={child.id}
+                    className={`p-4 rounded-xl border-2 transition-all cursor-pointer ${
+                      selectedChild?.id === child.id
+                        ? 'border-primary bg-primary/10'
+                        : 'border-border hover:border-primary/50'
+                    }`}
+                    onClick={() => setSelectedChild(child)}
+                  >
+                    <div className="text-center space-y-2">
+                      <div className="text-3xl">{child.avatar || '👤'}</div>
+                      <h3 className="font-fredoka font-bold">{child.name}</h3>
+                      <p className="text-sm text-muted-foreground capitalize">{child.age_group}</p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedChild(child);
+                          setIsEditing(true);
+                        }}
+                      >
+                        Edit
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 text-center space-y-3">
+                <Button 
+                  variant="outline"
+                  onClick={() => {
+                    setName('');
+                    setAgeGroup('');
+                    setAvatar('🦄');
+                    setSelectedChild(null);
+                    setIsEditing(true);
+                  }}
+                >
+                  ➕ Add Another Child
+                </Button>
+                <Button 
+                  variant="fun" 
+                  size="kid" 
+                  className="w-full"
+                  onClick={() => navigate('/modes')}
+                >
+                  🎮 Play Games & Stories
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <Card className="shadow-soft">
           <CardHeader className="text-center">
             <div className="w-20 h-20 mx-auto bg-gradient-primary rounded-full flex items-center justify-center text-4xl shadow-soft">
               {avatar}
             </div>
             <CardTitle className="font-fredoka">
-              {isEditing ? 'Set Up Profile' : `Hello, ${name}! 👋`}
+              {isEditing ? (selectedChild ? 'Edit Profile' : 'Add New Child') : `Hello, ${name}! 👋`}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -145,17 +208,32 @@ const Profile = () => {
                   </div>
                 </div>
 
-                <Button 
-                  variant="fun" 
-                  size="kid" 
-                  className="w-full"
-                  onClick={handleSave}
-                  disabled={!name.trim() || !ageGroup || isLoading}
-                >
-                  {isLoading ? '💾 Saving...' : (selectedChild ? '💾 Save Changes' : '🚀 Start Playing!')}
-                </Button>
+                <div className="flex gap-3">
+                  <Button 
+                    variant="fun" 
+                    size="kid" 
+                    className="flex-1"
+                    onClick={handleSave}
+                    disabled={!name.trim() || !ageGroup || isLoading}
+                  >
+                    {isLoading ? '💾 Saving...' : (selectedChild ? '💾 Save Changes' : '🚀 Create Profile')}
+                  </Button>
+                  {childrenProfiles.length > 0 && (
+                    <Button 
+                      variant="outline"
+                      onClick={() => {
+                        setIsEditing(false);
+                        if (!selectedChild && childrenProfiles.length > 0) {
+                          setSelectedChild(childrenProfiles[0]);
+                        }
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  )}
+                </div>
               </>
-            ) : (
+            ) : selectedChild && (
               <div className="space-y-4 text-center">
                 <p className="font-comic text-lg">Ready for more adventures?</p>
                 <div className="space-y-3">

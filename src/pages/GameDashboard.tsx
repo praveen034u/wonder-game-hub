@@ -10,7 +10,7 @@ import FriendsPanel from "@/components/Multiplayer/FriendsPanel";
 
 const GameDashboard = () => {
   const navigate = useNavigate();
-  const { selectedChild } = useAppContext();
+  const { selectedChild, childrenProfiles, setSelectedChild } = useAppContext();
   const [selectedDifficulties, setSelectedDifficulties] = useState<Record<string, string>>({});
   const [showMultiplayerModal, setShowMultiplayerModal] = useState(false);
   const [selectedGame, setSelectedGame] = useState<{ id: string; difficulty: string } | null>(null);
@@ -52,6 +52,45 @@ const GameDashboard = () => {
               </h1>
               <p className="text-lg text-muted-foreground">Choose a fun game to play</p>
             </div>
+
+            {/* Child Profile Selector */}
+            {childrenProfiles.length > 1 && (
+              <div className="mb-6 text-center">
+                <div className="inline-flex items-center gap-3 bg-white/80 p-3 rounded-lg shadow-sm">
+                  <label className="text-sm font-medium text-muted-foreground">
+                    Playing as:
+                  </label>
+                  <Select
+                    value={selectedChild?.id || ''}
+                    onValueChange={(value) => {
+                      const child = childrenProfiles.find(c => c.id === value);
+                      if (child) setSelectedChild(child);
+                    }}
+                  >
+                    <SelectTrigger className="w-48">
+                      <SelectValue placeholder="Select child">
+                        {selectedChild && (
+                          <span className="flex items-center gap-2">
+                            <span>{selectedChild.avatar || '👤'}</span>
+                            {selectedChild.name}
+                          </span>
+                        )}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {childrenProfiles.map((child) => (
+                        <SelectItem key={child.id} value={child.id}>
+                          <span className="flex items-center gap-2">
+                            <span>{child.avatar || '👤'}</span>
+                            {child.name}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
 
             <div className="mb-6 text-center">
               <Button

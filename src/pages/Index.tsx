@@ -5,7 +5,7 @@ import { useAppAuth, useAppContext } from "@/contexts/Auth0Context";
 const Index = () => {
   const navigate = useNavigate();
   const { isAuthenticated, isLoading } = useAppAuth();
-  const { parentProfile, selectedChild } = useAppContext();
+  const { parentProfile, childrenProfiles } = useAppContext();
 
   useEffect(() => {
     if (isLoading) return;
@@ -15,20 +15,21 @@ const Index = () => {
       return;
     }
 
-    // Check if user has completed profile setup
-    if (!selectedChild) {
-      navigate('/profile', { replace: true });
-      return;
-    }
-
     // Check if user has completed parent setup
     if (!parentProfile) {
       navigate('/parent-setup', { replace: true });
       return;
     }
 
+    // Check if user has any child profiles - if not, redirect to create profile
+    if (!childrenProfiles || childrenProfiles.length === 0) {
+      navigate('/profile', { replace: true });
+      return;
+    }
+
+    // If child profiles exist, redirect to mode selector
     navigate('/modes', { replace: true });
-  }, [isAuthenticated, selectedChild, parentProfile, isLoading, navigate]);
+  }, [isAuthenticated, childrenProfiles, parentProfile, isLoading, navigate]);
 
   if (isLoading) {
     return (
