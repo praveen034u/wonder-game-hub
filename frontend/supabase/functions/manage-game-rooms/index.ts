@@ -382,7 +382,7 @@ serve(async (req) => {
         );
 
       case 'handle_join_request':
-        const { request_id, approve } = await req.json();
+        // Use already parsed request_id and approve from top-level destructuring
         
         // Get the join request
         const { data: joinRequest } = await supabase
