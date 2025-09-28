@@ -21,8 +21,14 @@ const Index = () => {
       return;
     }
 
-    // Always redirect to profile page for child selection/creation
-    navigate('/profile', { replace: true });
+    // Redirect based on whether children exist
+    if (childrenProfiles && childrenProfiles.length > 0) {
+      // User has children - show "My Children" screen for selection
+      navigate('/profile', { replace: true });
+    } else {
+      // User has no children - show add child profile screen
+      navigate('/profile', { replace: true });
+    }
   }, [childrenProfiles, parentProfile, isLoading, isLoadingProfiles, isAuthenticated, navigate]);
 
   if (isLoading || isLoadingProfiles) {
