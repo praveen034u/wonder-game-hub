@@ -103,6 +103,8 @@ class SupabaseTestSuite:
             print(f"❌ Connectivity test exception: {str(e)}")
         
         return results
+
+    def test_friends_management(self) -> Dict[str, Any]:
         """Test all friends management functions"""
         results = {
             'send_friend_request': False,
