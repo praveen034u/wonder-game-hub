@@ -67,6 +67,29 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
       loadFriends();
       loadFriendRequests();
       loadOnlineUsers();
+
+      // Set up real-time subscription for friends updates
+      const friendsChannel = supabase
+        .channel('friends-changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'friends',
+            filter: `requester_id=eq.${selectedChild.id},addressee_id=eq.${selectedChild.id}`
+          },
+          (payload) => {
+            console.log('Friends table changed:', payload);
+            // Refresh friends list when there's a change
+            loadFriends();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(friendsChannel);
+      };
     }
   }, [selectedChild]);
 
@@ -289,10 +312,21 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
           title: action === 'accept' ? "Friend Request Accepted" : "Friend Request Declined",
           description: action === 'accept' ? "You are now friends!" : "Friend request declined",
         });
-        loadFriendRequests();
+        
+        // Refresh both lists regardless of action to ensure UI consistency
+        await loadFriendRequests();
         if (action === 'accept') {
-          loadFriends();
+          // Add a small delay to ensure the database transaction is complete
+          setTimeout(async () => {
+            await loadFriends();
+          }, 500);
         }
+      } else {
+        toast({
+          title: "Error",
+          description: data?.error || "Failed to handle friend request",
+          variant: "destructive",
+        });
       }
     } catch (error) {
       console.error('Error handling friend request:', error);
