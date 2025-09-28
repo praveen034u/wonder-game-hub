@@ -45,6 +45,9 @@ const RoomManagementModal = ({ isOpen, onClose }: RoomManagementModalProps) => {
   const [isCreating, setIsCreating] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
   const [activeTab, setActiveTab] = useState("create");
+  const [joinRoomCode, setJoinRoomCode] = useState("");
+  const [isJoining, setIsJoining] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
   
   // Friend management states
   const [friends, setFriends] = useState<Friend[]>([]);
@@ -280,6 +283,88 @@ const RoomManagementModal = ({ isOpen, onClose }: RoomManagementModalProps) => {
     }
   };
 
+  const joinRoom = async () => {
+    if (!selectedChild || !joinRoomCode.trim()) return;
+
+    try {
+      setIsJoining(true);
+      
+      const { data } = await supabase.functions.invoke('manage-game-rooms', {
+        body: {
+          action: 'join_room',
+          child_id: selectedChild.id,
+          room_code: joinRoomCode.trim()
+        }
+      });
+
+      if (data?.success) {
+        toast({
+          title: "Joined Room!",
+          description: "Successfully joined the room",
+        });
+        setJoinRoomCode("");
+        loadCurrentRoom();
+      } else {
+        toast({
+          title: "Error",
+          description: data?.error || "Failed to join room",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error joining room:', error);
+      toast({
+        title: "Error",
+        description: "Failed to join room",
+        variant: "destructive",
+      });
+    } finally {
+      setIsJoining(false);
+    }
+  };
+
+  const closeRoom = async () => {
+    if (!selectedChild || !currentRoom) return;
+
+    try {
+      setIsClosing(true);
+      
+      const { data } = await supabase.functions.invoke('manage-game-rooms', {
+        body: {
+          action: 'close_room',
+          child_id: selectedChild.id,
+          room_id: currentRoom.id
+        }
+      });
+
+      if (data?.success) {
+        toast({
+          title: "Room Closed",
+          description: "Room has been closed and all players have been removed",
+        });
+        setCurrentRoom(null);
+        setRoomCode("");
+        setPlayers([]);
+        setActiveTab("create");
+      } else {
+        toast({
+          title: "Error",
+          description: data?.error || "Failed to close room",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error closing room:', error);
+      toast({
+        title: "Error",
+        description: "Failed to close room",
+        variant: "destructive",
+      });
+    } finally {
+      setIsClosing(false);
+    }
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
@@ -289,8 +374,9 @@ const RoomManagementModal = ({ isOpen, onClose }: RoomManagementModalProps) => {
         
         <div className="space-y-4">
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="create">Create</TabsTrigger>
+              <TabsTrigger value="join">Join</TabsTrigger>
               <TabsTrigger value="room" disabled={!currentRoom}>Current Room</TabsTrigger>
             </TabsList>
             
@@ -398,6 +484,39 @@ const RoomManagementModal = ({ isOpen, onClose }: RoomManagementModalProps) => {
               </div>
             </TabsContent>
 
+            <TabsContent value="join" className="space-y-4">
+              <div className="text-center">
+                <h3 className="text-lg font-semibold mb-2">Join Room</h3>
+                <p className="text-sm text-muted-foreground">
+                  Enter room code to join a game
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="join-room-code">Room Code</Label>
+                  <Input
+                    id="join-room-code"
+                    placeholder="Enter room code..."
+                    value={joinRoomCode}
+                    onChange={(e) => setJoinRoomCode(e.target.value.toUpperCase())}
+                    maxLength={6}
+                  />
+                </div>
+
+                <Button 
+                  onClick={joinRoom} 
+                  disabled={isJoining || !joinRoomCode.trim()}
+                  className="w-full"
+                >
+                  {isJoining ? "Joining..." : "Join Room"}
+                </Button>
+
+                <div className="text-xs text-muted-foreground text-center">
+                  💡 You can only join rooms you've been invited to
+                </div>
+              </div>
+            </TabsContent>
 
             <TabsContent value="room" className="space-y-4">
               {currentRoom && (
@@ -452,14 +571,35 @@ const RoomManagementModal = ({ isOpen, onClose }: RoomManagementModalProps) => {
 
                   {/* Action Buttons */}
                   <div className="flex gap-2">
-                    <Button 
-                      variant="destructive" 
-                      onClick={leaveRoom}
-                      disabled={isLeaving}
-                      className="w-full"
-                    >
-                      {isLeaving ? "Leaving..." : "Leave Room"}
-                    </Button>
+                    {currentRoom.host_child_id === selectedChild?.id ? (
+                      <>
+                        <Button 
+                          variant="destructive" 
+                          onClick={closeRoom}
+                          disabled={isClosing}
+                          className="flex-1"
+                        >
+                          {isClosing ? "Closing..." : "Close Room"}
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          onClick={leaveRoom}
+                          disabled={isLeaving}
+                          className="flex-1"
+                        >
+                          {isLeaving ? "Leaving..." : "Leave Room"}
+                        </Button>
+                      </>
+                    ) : (
+                      <Button 
+                        variant="destructive" 
+                        onClick={leaveRoom}
+                        disabled={isLeaving}
+                        className="w-full"
+                      >
+                        {isLeaving ? "Leaving..." : "Leave Room"}
+                      </Button>
+                    )}
                   </div>
 
                   <div className="text-xs text-muted-foreground text-center">
