@@ -49,7 +49,8 @@ serve(async (req) => {
       friend_ids = [],
       room_id,
       request_id,
-      approve
+      approve,
+      invitation_id
     } = await req.json();
 
     console.log('Received request:', { action, child_id, game_id, room_code });
