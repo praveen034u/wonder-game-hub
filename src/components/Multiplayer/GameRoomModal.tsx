@@ -352,7 +352,7 @@ const GameRoomModal = ({ isOpen, onClose, gameId, difficulty, onStartGame }: Gam
                     <Button 
                       onClick={() => onStartGame(roomCode)}
                       className="flex-1"
-                      disabled={players.length < 2}
+                      disabled={players.length < 1}
                     >
                       Start Game ({players.length} players)
                     </Button>
@@ -365,7 +365,7 @@ const GameRoomModal = ({ isOpen, onClose, gameId, difficulty, onStartGame }: Gam
                   </div>
 
                   <div className="text-xs text-muted-foreground text-center">
-                    💡 Need at least 2 players to start the game
+                    💡 Can start with AI friend! More players can join during the game
                   </div>
                 </>
               )}

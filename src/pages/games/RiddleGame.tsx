@@ -8,6 +8,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useProgress } from "@/contexts/ProgressContext";
 import { useToast } from "@/hooks/use-toast";
+import GameRoomPanel from "@/components/Multiplayer/GameRoomPanel";
 import riddlesData from "@/config/riddles.json";
 import type { Riddle, GameResult } from "@/types";
 
@@ -30,6 +31,7 @@ const RiddleGame = () => {
   const { toast } = useToast();
 
   const difficulty = searchParams.get('difficulty') || 'easy';
+  const roomCode = searchParams.get('room');
 
   // Only show riddle game if gameId matches
   if (gameId !== 'riddle') {
@@ -123,6 +125,16 @@ const RiddleGame = () => {
         }
       }, (index + 1) * 1500 + Math.random() * 1000);
     });
+  };
+
+  const handlePlayerJoin = (newPlayer: any) => {
+    setPlayers(prev => [...prev, {
+      id: newPlayer.id,
+      name: newPlayer.name,
+      avatar: newPlayer.avatar,
+      score: 0,
+      isAI: newPlayer.isAI
+    }]);
   };
 
   const handleAnswerSelect = (answer: string) => {
@@ -395,6 +407,15 @@ const RiddleGame = () => {
   // Playing Phase  
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/20 via-secondary/20 to-accent/20 p-4">
+      {/* Multiplayer Room Panel */}
+      {roomCode && (
+        <GameRoomPanel 
+          roomCode={roomCode} 
+          gameId={gameId || 'riddle'}
+          onPlayerJoin={handlePlayerJoin}
+        />
+      )}
+      
       <div className="max-w-md mx-auto">
         <Card className="bg-white/90 shadow-xl">
           <CardHeader className="text-center">

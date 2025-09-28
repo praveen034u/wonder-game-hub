@@ -243,6 +243,111 @@ serve(async (req) => {
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
 
+      case 'request_to_join':
+        // Check if room exists and is active
+        const { data: targetRoom, error: targetRoomError } = await supabase
+          .from('game_rooms')
+          .select('*')
+          .eq('room_code', room_code)
+          .single();
+
+        if (targetRoomError || !targetRoom) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'Room not found' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Get requester info
+        const { data: requesterProfile } = await supabase
+          .from('children_profiles')
+          .select('name, avatar')
+          .eq('id', child_id)
+          .single();
+
+        // Create join request
+        const { data: newRequest, error: requestError } = await supabase
+          .from('join_requests')
+          .insert({
+            room_code,
+            child_id,
+            player_name: requesterProfile?.name || 'Player',
+            player_avatar: requesterProfile?.avatar || '👤',
+            status: 'pending'
+          })
+          .select()
+          .single();
+
+        if (requestError) throw requestError;
+
+        return new Response(
+          JSON.stringify({ success: true, data: newRequest }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+
+      case 'handle_join_request':
+        const { request_id, approve } = await req.json();
+        
+        // Get the join request
+        const { data: joinRequest } = await supabase
+          .from('join_requests')
+          .select('*')
+          .eq('id', request_id)
+          .single();
+
+        if (!joinRequest) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'Request not found' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Update request status
+        await supabase
+          .from('join_requests')
+          .update({ status: approve ? 'approved' : 'denied' })
+          .eq('id', request_id);
+
+        if (approve) {
+          // Get room info
+          const { data: roomForJoin } = await supabase
+            .from('game_rooms')
+            .select('*')
+            .eq('room_code', joinRequest.room_code)
+            .single();
+
+          if (roomForJoin && roomForJoin.current_players < roomForJoin.max_players) {
+            // Add player to room
+            const { data: newParticipant } = await supabase
+              .from('room_participants')
+              .insert({
+                room_id: roomForJoin.id,
+                child_id: joinRequest.child_id,
+                player_name: joinRequest.player_name,
+                player_avatar: joinRequest.player_avatar,
+                is_ai: false
+              })
+              .select()
+              .single();
+
+            // Update room player count
+            await supabase
+              .from('game_rooms')
+              .update({ current_players: roomForJoin.current_players + 1 })
+              .eq('id', roomForJoin.id);
+
+            return new Response(
+              JSON.stringify({ success: true, player: newParticipant }),
+              { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+        }
+
+        return new Response(
+          JSON.stringify({ success: true }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+
       default:
         throw new Error('Invalid action');
     }

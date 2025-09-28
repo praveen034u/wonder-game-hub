@@ -7,6 +7,7 @@ import { useAppContext } from "@/contexts/Auth0Context";
 import gamesConfig from "@/config/games.config.json";
 import GameRoomModal from "@/components/Multiplayer/GameRoomModal";
 import FriendsPanel from "@/components/Multiplayer/FriendsPanel";
+import JoinRequestButton from "@/components/Multiplayer/JoinRequestButton";
 
 const GameDashboard = () => {
   const navigate = useNavigate();
@@ -100,6 +101,7 @@ const GameDashboard = () => {
               >
                 📚 Switch to Stories
               </Button>
+              <JoinRequestButton className="bg-white/80 hover:bg-white text-primary border-2 border-primary/30" />
             </div>
 
             <div className="flex justify-center">
