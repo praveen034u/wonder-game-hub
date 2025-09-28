@@ -92,13 +92,13 @@ const GameRoomPanel = ({ roomCode, gameId, onPlayerJoin }: GameRoomPanelProps) =
 
         // Get pending join requests
         const { data: requests } = await supabase
-          .from('join_requests')
+          .from('join_requests' as any)
           .select('*')
           .eq('room_code', roomCode)
           .eq('status', 'pending');
 
         if (requests) {
-          setJoinRequests(requests);
+          setJoinRequests(requests as unknown as JoinRequest[]);
         }
       }
     } catch (error) {
