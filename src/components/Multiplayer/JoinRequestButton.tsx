@@ -7,24 +7,20 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useAppContext } from "@/contexts/Auth0Context";
 import { useToast } from "@/hooks/use-toast";
-import { RefreshCw, Clock, CheckCircle2, XCircle } from "lucide-react";
+import { RefreshCw, Users, UserCheck } from "lucide-react";
+
+interface JoinRequest {
+  id: string;
+  room_code: string;
+  child_id: string;
+  player_name: string;
+  player_avatar: string;
+  status: string;
+  created_at: string;
+}
 
 interface JoinRequestButtonProps {
   className?: string;
-}
-
-interface PendingInvitation {
-  id: string;
-  room_code: string;
-  player_name: string;
-  player_avatar: string;
-  created_at: string;
-  game_rooms: {
-    game_id: string;
-    difficulty: string;
-    host_child_id: string;
-    status: string;
-  };
 }
 
 const JoinRequestButton = ({ className }: JoinRequestButtonProps) => {
@@ -33,38 +29,104 @@ const JoinRequestButton = ({ className }: JoinRequestButtonProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [roomCode, setRoomCode] = useState("");
   const [isRequesting, setIsRequesting] = useState(false);
-  const [showManualEntry, setShowManualEntry] = useState(false);
-  const [pendingInvitations, setPendingInvitations] = useState<PendingInvitation[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isProcessing, setIsProcessing] = useState<string | null>(null);
+  const [pendingRequests, setPendingRequests] = useState<JoinRequest[]>([]);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [showInvitations, setShowInvitations] = useState(false);
 
-  const fetchPendingInvitations = async () => {
+  // Fetch pending join requests for current child
+  const fetchPendingRequests = async () => {
     if (!selectedChild?.id) return;
 
     try {
-      setIsLoading(true);
+      const { data, error } = await supabase
+        .from('join_requests')
+        .select('*')
+        .eq('child_id', selectedChild.id)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching pending requests:', error);
+        return;
+      }
+
+      setPendingRequests(data || []);
+    } catch (error) {
+      console.error('Error fetching pending requests:', error);
+    }
+  };
+
+  // Load pending requests on mount and when child changes
+  useEffect(() => {
+    fetchPendingRequests();
+  }, [selectedChild?.id]);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await fetchPendingRequests();
+    setIsRefreshing(false);
+    toast({
+      title: "Refreshed",
+      description: "Invitation list updated",
+    });
+  };
+
+  const handleAcceptInvitation = async (request: JoinRequest) => {
+    try {
       const { data } = await supabase.functions.invoke('manage-game-rooms', {
         body: {
-          action: 'get_pending_invitations',
-          child_id: selectedChild.id
+          action: 'handle_join_request',
+          request_id: request.id,
+          approve: true
         }
       });
 
       if (data?.success) {
-        setPendingInvitations(data.data || []);
+        toast({
+          title: "Invitation Accepted!",
+          description: "You have joined the game room",
+        });
+        setShowInvitations(false);
+        setIsOpen(false);
+        await fetchPendingRequests(); // Refresh the list
+      } else {
+        toast({
+          title: "Failed to Join",
+          description: "Could not join the room",
+          variant: "destructive",
+        });
       }
     } catch (error) {
-      console.error('Error fetching invitations:', error);
-    } finally {
-      setIsLoading(false);
+      console.error('Error accepting invitation:', error);
+      toast({
+        title: "Error",
+        description: "Failed to accept invitation",
+        variant: "destructive",
+      });
     }
   };
 
-  useEffect(() => {
-    if (selectedChild?.id) {
-      fetchPendingInvitations();
+  const handleDeclineInvitation = async (request: JoinRequest) => {
+    try {
+      const { data } = await supabase.functions.invoke('manage-game-rooms', {
+        body: {
+          action: 'handle_join_request',
+          request_id: request.id,
+          approve: false
+        }
+      });
+
+      if (data?.success) {
+        toast({
+          title: "Invitation Declined",
+          description: "You have declined the room invitation",
+        });
+        await fetchPendingRequests(); // Refresh the list
+      }
+    } catch (error) {
+      console.error('Error declining invitation:', error);
     }
-  }, [selectedChild?.id]);
+  };
 
   const handleJoinRequest = async () => {
     if (!selectedChild?.id || !roomCode.trim()) {
@@ -92,9 +154,8 @@ const JoinRequestButton = ({ className }: JoinRequestButtonProps) => {
           title: "Request Sent!",
           description: "Your join request has been sent to the room host",
         });
-        setShowManualEntry(false);
+        setIsOpen(false);
         setRoomCode("");
-        fetchPendingInvitations(); // Refresh invitations
       } else {
         toast({
           title: "Request Failed",
@@ -114,196 +175,82 @@ const JoinRequestButton = ({ className }: JoinRequestButtonProps) => {
     }
   };
 
-  const handleAcceptInvitation = async (invitationId: string) => {
-    if (!selectedChild?.id) return;
-
-    try {
-      setIsProcessing(invitationId);
-      
-      const { data } = await supabase.functions.invoke('manage-game-rooms', {
-        body: {
-          action: 'accept_invitation',
-          child_id: selectedChild.id,
-          invitation_id: invitationId
-        }
-      });
-
-      if (data?.success) {
-        toast({
-          title: "Joined Room!",
-          description: `Successfully joined room ${data.data.room_code}`,
-        });
-        setIsOpen(false);
-        fetchPendingInvitations(); // Refresh to remove accepted invitation
-      } else {
-        toast({
-          title: "Failed to Join",
-          description: data?.error || "Failed to join room",
-          variant: "destructive",
-        });
-      }
-    } catch (error) {
-      console.error('Error accepting invitation:', error);
-      toast({
-        title: "Error",
-        description: "Failed to accept invitation",
-        variant: "destructive",
-      });
-    } finally {
-      setIsProcessing(null);
-    }
-  };
-
-  const handleDeclineInvitation = async (invitationId: string) => {
-    if (!selectedChild?.id) return;
-
-    try {
-      setIsProcessing(invitationId);
-      
-      const { data } = await supabase.functions.invoke('manage-game-rooms', {
-        body: {
-          action: 'decline_invitation',
-          child_id: selectedChild.id,
-          invitation_id: invitationId
-        }
-      });
-
-      if (data?.success) {
-        toast({
-          title: "Invitation Declined",
-          description: "You have declined the room invitation",
-        });
-        fetchPendingInvitations(); // Refresh to remove declined invitation
-      } else {
-        toast({
-          title: "Error",
-          description: "Failed to decline invitation",
-          variant: "destructive",
-        });
-      }
-    } catch (error) {
-      console.error('Error declining invitation:', error);
-      toast({
-        title: "Error",
-        description: "Failed to decline invitation",
-        variant: "destructive",
-      });
-    } finally {
-      setIsProcessing(null);
-    }
-  };
-
   return (
     <>
-      <Button
-        variant="outline"
-        onClick={() => setIsOpen(true)}
-        className={`${className} relative`}
-      >
-        🚪 Room Invitations
-        {pendingInvitations.length > 0 && (
-          <Badge 
-            variant="destructive" 
-            className="absolute -top-2 -right-2 h-5 w-5 p-0 flex items-center justify-center text-xs"
-          >
-            {pendingInvitations.length}
-          </Badge>
-        )}
-      </Button>
+      <div className="relative">
+        <Button
+          variant="outline"
+          onClick={() => {
+            setIsOpen(true);
+            setShowInvitations(false);
+          }}
+          className={className}
+        >
+          <Users className="w-4 h-4 mr-2" />
+          Join Game
+          {pendingRequests.length > 0 && (
+            <Badge variant="destructive" className="ml-2 px-1.5 py-0.5 text-xs">
+              {pendingRequests.length}
+            </Badge>
+          )}
+        </Button>
+      </div>
 
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <div className="flex items-center justify-between">
-              <DialogTitle>Room Invitations</DialogTitle>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={fetchPendingInvitations}
-                disabled={isLoading}
-                className="h-8 w-8"
-              >
-                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-              </Button>
-            </div>
+            <DialogTitle className="flex items-center gap-2">
+              <Users className="w-5 h-5" />
+              {showInvitations ? "Room Invitations" : "Join Game"}
+              {!showInvitations && pendingRequests.length > 0 && (
+                <Badge variant="destructive" className="ml-2">
+                  {pendingRequests.length} pending
+                </Badge>
+              )}
+            </DialogTitle>
           </DialogHeader>
           
           <div className="space-y-4">
-            {isLoading ? (
-              <div className="text-center py-8">
-                <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground">Loading invitations...</p>
-              </div>
-            ) : pendingInvitations.length > 0 ? (
-              <>
-                <p className="text-sm text-muted-foreground">
-                  You have {pendingInvitations.length} pending room invitation{pendingInvitations.length !== 1 ? 's' : ''}. 
-                  You can only accept one invitation.
-                </p>
-                <div className="space-y-3 max-h-60 overflow-y-auto">
-                  {pendingInvitations.map((invitation) => (
-                    <div key={invitation.id} className="border rounded-lg p-4 space-y-3">
-                      <div className="flex items-center gap-3">
-                        <div className="text-2xl">{invitation.player_avatar}</div>
-                        <div className="flex-1">
-                          <p className="font-semibold">{invitation.game_rooms.game_id}</p>
-                          <p className="text-sm text-muted-foreground">
-                            Room: {invitation.room_code} • {invitation.game_rooms.difficulty}
-                          </p>
-                          <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
-                            <Clock className="h-3 w-3" />
-                            {new Date(invitation.created_at).toLocaleTimeString()}
-                          </div>
-                        </div>
-                      </div>
-                      
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          onClick={() => handleAcceptInvitation(invitation.id)}
-                          disabled={isProcessing === invitation.id}
-                          className="flex-1"
-                        >
-                          <CheckCircle2 className="h-4 w-4 mr-1" />
-                          {isProcessing === invitation.id ? "Joining..." : "Accept"}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDeclineInvitation(invitation.id)}
-                          disabled={isProcessing === invitation.id}
-                          className="flex-1"
-                        >
-                          <XCircle className="h-4 w-4 mr-1" />
-                          Decline
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </>
-            ) : (
-              <div className="text-center py-8">
-                <p className="text-muted-foreground mb-4">No pending invitations</p>
-                <Button
-                  variant="outline"
-                  onClick={() => setShowManualEntry(!showManualEntry)}
-                  className="w-full"
-                >
-                  {showManualEntry ? "Hide Manual Entry" : "Request to Join with Room Code"}
-                </Button>
-              </div>
-            )}
-
-            {(showManualEntry || pendingInvitations.length === 0) && (
-              <>
-                {pendingInvitations.length > 0 && (
-                  <div className="border-t pt-4">
-                    <p className="text-sm text-muted-foreground mb-3">
-                      Or enter a room code manually:
-                    </p>
-                  </div>
+            {/* Toggle buttons */}
+            <div className="flex gap-2">
+              <Button
+                variant={showInvitations ? "outline" : "default"}
+                size="sm"
+                onClick={() => setShowInvitations(false)}
+                className="flex-1"
+              >
+                Request Join
+              </Button>
+              <Button
+                variant={showInvitations ? "default" : "outline"}
+                size="sm"
+                onClick={() => setShowInvitations(true)}
+                className="flex-1 relative"
+              >
+                Invitations
+                {pendingRequests.length > 0 && (
+                  <Badge variant="destructive" className="ml-1 px-1 py-0 text-xs">
+                    {pendingRequests.length}
+                  </Badge>
                 )}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+                className="px-2"
+              >
+                <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+              </Button>
+            </div>
+
+            {!showInvitations ? (
+              /* Request to join by room code */
+              <>
+                <div className="text-sm text-muted-foreground">
+                  Enter the room code of an active game to request to join.
+                </div>
                 
                 <div className="space-y-2">
                   <Label htmlFor="room-code-request">Room Code</Label>
@@ -324,21 +271,70 @@ const JoinRequestButton = ({ className }: JoinRequestButtonProps) => {
                   >
                     {isRequesting ? "Sending..." : "Send Request"}
                   </Button>
-                  {pendingInvitations.length > 0 && (
-                    <Button
-                      variant="outline"
-                      onClick={() => setShowManualEntry(false)}
-                    >
-                      Cancel
-                    </Button>
-                  )}
+                  <Button
+                    variant="outline"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    Cancel
+                  </Button>
                 </div>
               </>
-            )}
-
-            {(pendingInvitations.length > 0 && !showManualEntry) && (
-              <div className="flex justify-end pt-2">
-                <Button variant="outline" onClick={() => setIsOpen(false)}>
+            ) : (
+              /* Show pending invitations */
+              <div className="space-y-3">
+                {pendingRequests.length === 0 ? (
+                  <div className="text-center text-muted-foreground py-8">
+                    <Users className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                    <p>No pending invitations</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="text-sm text-muted-foreground">
+                      You have {pendingRequests.length} pending room invitation{pendingRequests.length > 1 ? 's' : ''}. You can only accept one at a time.
+                    </div>
+                    
+                    <div className="max-h-60 overflow-y-auto space-y-2">
+                      {pendingRequests.map((request) => (
+                        <div key={request.id} className="border rounded-lg p-3 space-y-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg">{request.player_avatar || '👤'}</span>
+                            <div className="flex-1">
+                              <p className="font-medium text-sm">Room: {request.room_code}</p>
+                              <p className="text-xs text-muted-foreground">
+                                Invited {new Date(request.created_at).toLocaleTimeString()}
+                              </p>
+                            </div>
+                          </div>
+                          
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              onClick={() => handleAcceptInvitation(request)}
+                              className="flex-1"
+                            >
+                              <UserCheck className="w-3 h-3 mr-1" />
+                              Accept
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleDeclineInvitation(request)}
+                              className="flex-1"
+                            >
+                              Decline
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+                
+                <Button
+                  variant="outline"
+                  onClick={() => setIsOpen(false)}
+                  className="w-full"
+                >
                   Close
                 </Button>
               </div>
