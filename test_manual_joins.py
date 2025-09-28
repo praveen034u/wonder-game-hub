@@ -23,8 +23,8 @@ def test_manual_joins():
     rooms_url = f"{supabase_url}/functions/v1/manage-game-rooms"
     
     # Use available children (not in rooms)
-    host_child_id = "7ac86082-2503-46cf-a318-505f5e2093b2"  # Oop
-    friend_child_id = "f424d098-340c-4cc6-a12f-a6e3ccc1d321"  # Kiddo
+    host_child_id = "86479007-e843-4c1d-8e45-c02516d19524"  # Kkkk
+    friend_child_id = "d771b6d0-1c90-431b-af96-dd6bf7a429f5"  # llll
     
     print("🎯 Testing manual joins in game rooms functions...")
     print("=" * 60)
