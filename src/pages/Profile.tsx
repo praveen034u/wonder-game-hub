@@ -33,10 +33,14 @@ const Profile = () => {
       setName(selectedChild.name);
       setAgeGroup(selectedChild.age_group);
       setAvatar(selectedChild.avatar || '🦄');
+      setIsEditing(false); // Ensure we're not in editing mode when child is selected
     } else {
       // If no children exist, go straight to editing mode
       if (!childrenProfiles || childrenProfiles.length === 0) {
         setIsEditing(true);
+      } else {
+        // If children exist but none selected, show the children list (not editing mode)
+        setIsEditing(false);
       }
     }
   }, [selectedChild, childrenProfiles]);
