@@ -413,14 +413,21 @@ serve(async (req) => {
             .single();
 
           if (roomForJoin && roomForJoin.current_players < roomForJoin.max_players) {
-            // Add player to room
+            // Get the accepting player's profile information (not the host's info from join request)
+            const { data: acceptingPlayerProfile } = await supabase
+              .from('children_profiles')
+              .select('name, avatar')
+              .eq('id', joinRequest.child_id)
+              .single();
+
+            // Add player to room with their actual profile info
             const { data: newParticipant } = await supabase
               .from('room_participants')
               .insert({
                 room_id: roomForJoin.id,
                 child_id: joinRequest.child_id,
-                player_name: joinRequest.player_name,
-                player_avatar: joinRequest.player_avatar,
+                player_name: acceptingPlayerProfile?.name || 'Player',
+                player_avatar: acceptingPlayerProfile?.avatar || '👤',
                 is_ai: false
               })
               .select()
