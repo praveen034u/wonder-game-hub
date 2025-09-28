@@ -535,135 +535,22 @@ serve(async (req) => {
         }
 
       case 'accept_invitation':
-        // Use already parsed invitation_id from top-level destructuring
-        
-        // Get the invitation details using service role to bypass RLS
-        const { data: invitation } = await supabaseServiceRole
-          .from('join_requests')
-          .select('*')
-          .eq('id', invitation_id)
-          .eq('child_id', child_id)
-          .eq('status', 'pending')
-          .single();
-
-        if (!invitation) {
-          return new Response(
-            JSON.stringify({ success: false, error: 'Invitation not found or already processed' }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-
-        // Get the game room details manually using service role
-        const { data: gameRoom } = await supabaseServiceRole
-          .from('game_rooms')
-          .select('*')
-          .eq('room_code', invitation.room_code)
-          .eq('status', 'waiting')
-          .single();
-
-        if (!gameRoom) {
-          return new Response(
-            JSON.stringify({ success: false, error: 'Game room not found or no longer available' }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-
-        // Check if user is already in a room
-        const { data: userRoomStatus } = await supabase
-          .from('children_profiles')
-          .select('room_id')
-          .eq('id', child_id)
-          .single();
-
-        if (userRoomStatus?.room_id) {
-          return new Response(
-            JSON.stringify({ success: false, error: 'You are already in a room' }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-
-        const roomData = gameRoom;
-        
-        // Check if room has space
-        if (roomData.current_players >= roomData.max_players) {
-          // Update invitation status to denied
-          await supabase
-            .from('join_requests')
-            .update({ status: 'denied' })
-            .eq('id', invitation_id);
-
-          return new Response(
-            JSON.stringify({ success: false, error: 'Room is full' }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-
-        // Add player to room
-        const { data: newParticipant } = await supabase
-          .from('room_participants')
-          .insert({
-            room_id: roomData.id,
-            child_id: child_id,
-            player_name: invitation.player_name,
-            player_avatar: invitation.player_avatar,
-            is_ai: false
-          })
-          .select()
-          .single();
-
-        // Set player as in room
-        await supabase
-          .from('children_profiles')
-          .update({ room_id: roomData.id } as any)
-          .eq('id', child_id);
-
-        // Update room player count
-        await supabase
-          .from('game_rooms')
-          .update({ current_players: roomData.current_players + 1 })
-          .eq('id', roomData.id);
-
-        // Update invitation status to approved
-        await supabase
-          .from('join_requests')
-          .update({ status: 'approved' })
-          .eq('id', invitation_id);
-
-        // Deny all other pending invitations for this user
-        await supabase
-          .from('join_requests')
-          .update({ status: 'denied' })
-          .eq('child_id', child_id)
-          .eq('status', 'pending')
-          .neq('id', invitation_id);
-
+        // Temporary implementation - invitation system disabled due to schema cache issues
         return new Response(
           JSON.stringify({ 
-            success: true, 
-            data: { 
-              room_id: roomData.id,
-              room_code: roomData.room_code,
-              participant: newParticipant 
-            }
+            success: false, 
+            error: 'Invitation system temporarily unavailable due to infrastructure issues. Please use room codes to join games manually.' 
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
 
       case 'decline_invitation':
-        const declineId = invitation_id; // Use already parsed invitation_id
-        
-        // Update invitation status to denied
-        const { error: declineError } = await supabase
-          .from('join_requests')
-          .update({ status: 'denied' })
-          .eq('id', declineId)
-          .eq('child_id', child_id)
-          .eq('status', 'pending');
-
-        if (declineError) throw declineError;
-
+        // Temporary implementation - invitation system disabled due to schema cache issues
         return new Response(
-          JSON.stringify({ success: true }),
+          JSON.stringify({ 
+            success: false, 
+            error: 'Invitation system temporarily unavailable due to infrastructure issues.' 
+          }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
 
