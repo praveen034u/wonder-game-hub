@@ -616,7 +616,7 @@ serve(async (req) => {
         );
 
       case 'decline_invitation':
-        const { invitation_id: declineId } = await req.json();
+        const declineId = invitation_id; // Use already parsed invitation_id
         
         // Update invitation status to denied
         const { error: declineError } = await supabase
