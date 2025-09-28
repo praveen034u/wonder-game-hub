@@ -100,48 +100,33 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
 
     try {
       setIsLoading(true);
-      
-      // Get friendships where current child is involved
-      const { data: friendships, error } = await supabase
-        .from('friends')
-        .select('*')
-        .or(`requester_id.eq.${selectedChild.id},addressee_id.eq.${selectedChild.id}`)
-        .eq('status', 'accepted');
 
-      if (error) throw error;
-
-      // Get friend profiles for each friendship
-      const friendsList: Friend[] = [];
-      
-      for (const friendship of friendships || []) {
-        const friendId = friendship.requester_id === selectedChild.id 
-          ? friendship.addressee_id 
-          : friendship.requester_id;
-        
-        const { data: friendProfile, error: profileError } = await supabase
-          .from('children_profiles')
-          .select('id, name, avatar')
-          .eq('id', friendId)
-          .single();
-
-        if (!profileError && friendProfile) {
-          friendsList.push({
-            id: friendship.id,
-            name: friendProfile.name,
-            avatar: friendProfile.avatar || '👤',
-            status: 'offline' as const, // In real app, would check online status
-            child_id: friendProfile.id
-          });
+      // Use edge function to fetch friends with names/avatars reliably
+      const { data } = await supabase.functions.invoke('manage-friends', {
+        body: {
+          action: 'list_friends',
+          child_id: selectedChild.id
         }
-      }
-      // Merge online status from current onlineUsers state
-      const merged = friendsList.map((f) => {
-        const online = onlineUsers.find(u => u.id === f.child_id)?.status || 'offline';
-        return { ...f, status: online as Friend['status'] };
+      });
+
+      if (!data?.success) throw new Error(data?.error || 'Failed to load friends');
+
+      const apiFriends: any[] = data.data || [];
+
+      // Merge online status from current onlineUsers state (override edge fn status if we have fresher data)
+      const merged = apiFriends.map((f) => {
+        const online = onlineUsers.find(u => u.id === f.child_id)?.status;
+        return {
+          id: f.id,
+          child_id: f.child_id,
+          name: f.name,
+          avatar: f.avatar || '👤',
+          status: (online || f.status || 'offline') as Friend['status']
+        } as Friend;
       })
       // Sort: online first, then by name
       .sort((a, b) => {
-        if (a.status === b.status) return a.name.localeCompare(b.name);
+        if (a.status === b.status) return (a.name || '').localeCompare(b.name || '');
         return a.status === 'online' ? -1 : 1;
       });
 
@@ -149,9 +134,9 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
     } catch (error) {
       console.error('Error loading friends:', error);
       toast({
-        title: "Error",
-        description: "Failed to load friends",
-        variant: "destructive",
+        title: 'Error',
+        description: 'Failed to load friends',
+        variant: 'destructive',
       });
     } finally {
       setIsLoading(false);
@@ -457,14 +442,14 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
                       <div className="relative">
                         <Avatar className="w-8 h-8">
                           <AvatarImage src={friend.avatar} />
-                          <AvatarFallback>{friend.name[0]}</AvatarFallback>
+                          <AvatarFallback>{friend.name?.[0] || '?'}</AvatarFallback>
                         </Avatar>
                         <div 
                           className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-background ${getStatusColor(friend.status)}`}
                         />
                       </div>
                       <div>
-                        <p className="font-medium text-sm">{friend.name}</p>
+                        <p className="font-medium text-sm">{friend.name || 'Friend'}</p>
                         <p className="text-xs text-muted-foreground capitalize">{friend.status}</p>
                       </div>
                     </div>
