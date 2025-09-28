@@ -38,6 +38,14 @@ const GameRoomPanel = ({ roomCode, gameId, onPlayerJoin, players: externalPlayer
   const [showJoinRequest, setShowJoinRequest] = useState(false);
   const [currentRequest, setCurrentRequest] = useState<JoinRequest | null>(null);
   const [isExpanded, setIsExpanded] = useState(true);
+  const displayedPlayers: Player[] = players.length > 0
+    ? players.map((p) => {
+        const match = (externalPlayers || []).find(ep => ep.id === p.id);
+        return match
+          ? { ...p, name: p.name || match.name, avatar: p.avatar || match.avatar, score: match.score }
+          : p;
+      })
+    : (externalPlayers || []);
 
   useEffect(() => {
     if (gameMode === 'single' && externalPlayers) {
@@ -214,13 +222,13 @@ const GameRoomPanel = ({ roomCode, gameId, onPlayerJoin, players: externalPlayer
               <CardContent className="pt-0">
                 <div className="space-y-2">
                   <div className="text-xs text-muted-foreground mb-2">
-                    Players ({players.length})
+                    Players ({displayedPlayers.length})
                   </div>
-                  {players.map((player) => (
+                  {displayedPlayers.map((player) => (
                     <div key={player.id} className="flex items-center gap-2 p-2 bg-secondary/20 rounded">
                       <Avatar className="w-6 h-6">
                         <AvatarImage src={player.avatar} />
-                        <AvatarFallback className="text-xs">{player.avatar || player.name[0]}</AvatarFallback>
+                        <AvatarFallback className="text-xs">{player.avatar || (player.name ? player.name[0] : '?')}</AvatarFallback>
                       </Avatar>
                       <div className="flex-1 flex items-center justify-between">
                         <span className="text-xs font-medium">{player.name}</span>
