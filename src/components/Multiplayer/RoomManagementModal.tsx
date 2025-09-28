@@ -41,10 +41,8 @@ const RoomManagementModal = ({ isOpen, onClose }: RoomManagementModalProps) => {
   const [currentRoom, setCurrentRoom] = useState<GameRoom | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
   const [roomCode, setRoomCode] = useState("");
-  const [joinRoomCode, setJoinRoomCode] = useState("");
   const [customRoomName, setCustomRoomName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
-  const [isJoining, setIsJoining] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
   const [activeTab, setActiveTab] = useState("create");
   
@@ -230,45 +228,6 @@ const RoomManagementModal = ({ isOpen, onClose }: RoomManagementModalProps) => {
     }
   };
 
-  const joinRoom = async () => {
-    if (!selectedChild || !joinRoomCode.trim()) return;
-
-    try {
-      setIsJoining(true);
-      
-      const { data } = await supabase.functions.invoke('manage-game-rooms', {
-        body: {
-          action: 'join_room',
-          child_id: selectedChild.id,
-          room_code: joinRoomCode.toUpperCase()
-        }
-      });
-
-      if (data?.success) {
-        toast({
-          title: "Joined Room!",
-          description: `Welcome to room ${joinRoomCode}`,
-        });
-        setJoinRoomCode("");
-        loadCurrentRoom();
-      } else {
-        toast({
-          title: "Error",
-          description: data?.error || "Failed to join room",
-          variant: "destructive",
-        });
-      }
-    } catch (error) {
-      console.error('Error joining room:', error);
-      toast({
-        title: "Error",
-        description: "Failed to join room",
-        variant: "destructive",
-      });
-    } finally {
-      setIsJoining(false);
-    }
-  };
 
   const leaveRoom = async () => {
     if (!selectedChild || !currentRoom) return;
@@ -330,10 +289,9 @@ const RoomManagementModal = ({ isOpen, onClose }: RoomManagementModalProps) => {
         
         <div className="space-y-4">
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="create">Create</TabsTrigger>
-              <TabsTrigger value="join">Join</TabsTrigger>
-              <TabsTrigger value="room" disabled={!currentRoom}>Room</TabsTrigger>
+              <TabsTrigger value="room" disabled={!currentRoom}>Current Room</TabsTrigger>
             </TabsList>
             
             <TabsContent value="create" className="space-y-4">
@@ -440,35 +398,6 @@ const RoomManagementModal = ({ isOpen, onClose }: RoomManagementModalProps) => {
               </div>
             </TabsContent>
 
-            <TabsContent value="join" className="space-y-4">
-              <div className="text-center">
-                <h3 className="text-lg font-semibold mb-2">Join Room</h3>
-                <p className="text-sm text-muted-foreground">
-                  Enter a room code to join your friend's game
-                </p>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="room-code">Room Code</Label>
-                  <Input
-                    id="room-code"
-                    placeholder="Enter 6-character room code..."
-                    value={joinRoomCode}
-                    onChange={(e) => setJoinRoomCode(e.target.value.toUpperCase())}
-                    maxLength={6}
-                  />
-                </div>
-
-                <Button 
-                  onClick={joinRoom} 
-                  disabled={!joinRoomCode.trim() || isJoining}
-                  className="w-full"
-                >
-                  {isJoining ? "Joining..." : "Join Room"}
-                </Button>
-              </div>
-            </TabsContent>
 
             <TabsContent value="room" className="space-y-4">
               {currentRoom && (

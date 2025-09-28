@@ -6,9 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useAppContext } from "@/contexts/Auth0Context";
 import gamesConfig from "@/config/games.config.json";
 import GameRoomModal from "@/components/Multiplayer/GameRoomModal";
-import RoomManagementModal from "@/components/Multiplayer/RoomManagementModal";
 import FriendsPanel from "@/components/Multiplayer/FriendsPanel";
-import JoinRequestButton from "@/components/Multiplayer/JoinRequestButton";
 import { AppHeader } from "@/components/Navigation/AppHeader";
 
 const GameDashboard = () => {
@@ -19,7 +17,7 @@ const GameDashboard = () => {
   const [selectedGame, setSelectedGame] = useState<{ id: string; difficulty: string } | null>(null);
   const [isFriendsPanelExpanded, setIsFriendsPanelExpanded] = useState(true);
   const [pendingInvites, setPendingInvites] = useState<string[] | null>(null);
-  const [showRoomModal, setShowRoomModal] = useState(false);
+  
 
   const enabledGames = gamesConfig.filter(game => game.enabled);
 
@@ -71,18 +69,10 @@ const GameDashboard = () => {
               <Button
                 variant="outline"
                 onClick={() => navigate('/stories')}
-                className="bg-white/80 hover:bg-white text-primary border-2 border-primary/30 mr-3"
+                className="bg-white/80 hover:bg-white text-primary border-2 border-primary/30"
               >
                 📚 Switch to Stories
               </Button>
-              <Button
-                variant="outline"
-                onClick={() => setShowRoomModal(true)}
-                className="bg-white/80 hover:bg-white text-primary border-2 border-primary/30 mr-3"
-              >
-                🏠 Rooms
-              </Button>
-              <JoinRequestButton className="bg-white/80 hover:bg-white text-primary border-2 border-primary/30" />
             </div>
 
             <div className="flex justify-center">
@@ -174,13 +164,6 @@ const GameDashboard = () => {
            </div>
          </div>
 
-          {/* Room Management Modal */}
-          {showRoomModal && (
-            <RoomManagementModal
-              isOpen={showRoomModal}
-              onClose={() => setShowRoomModal(false)}
-            />
-          )}
 
           {/* Multiplayer Modal */}
           {showMultiplayerModal && selectedGame && (
