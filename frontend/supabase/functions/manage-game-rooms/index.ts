@@ -538,13 +538,25 @@ serve(async (req) => {
         // Get the invitation details
         const { data: invitation } = await supabase
           .from('join_requests')
-          .select(`
-            *,
-            game_rooms!join_requests_room_id_fkey(*)
-          `)
+          .select('*')
           .eq('id', invitation_id)
           .eq('child_id', child_id)
           .eq('status', 'pending')
+          .single();
+
+        if (!invitation) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'Invitation not found or already processed' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Get the game room details manually
+        const { data: gameRoom } = await supabase
+          .from('game_rooms')
+          .select('*')
+          .eq('room_code', invitation.room_code)
+          .eq('status', 'waiting')
           .single();
 
         if (!invitation) {
