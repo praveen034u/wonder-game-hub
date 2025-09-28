@@ -527,8 +527,6 @@ serve(async (req) => {
 
         const invitationsError = null; // No error since we handled it manually
 
-        if (invitationsError) throw invitationsError;
-
         return new Response(
           JSON.stringify({ success: true, data: pendingInvitations || [] }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
