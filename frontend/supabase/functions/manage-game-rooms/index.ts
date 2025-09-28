@@ -559,9 +559,9 @@ serve(async (req) => {
           .eq('status', 'waiting')
           .single();
 
-        if (!invitation) {
+        if (!gameRoom) {
           return new Response(
-            JSON.stringify({ success: false, error: 'Invitation not found or already processed' }),
+            JSON.stringify({ success: false, error: 'Game room not found or no longer available' }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
@@ -580,7 +580,7 @@ serve(async (req) => {
           );
         }
 
-        const roomData = invitation.game_rooms;
+        const roomData = gameRoom;
         
         // Check if room has space
         if (roomData.current_players >= roomData.max_players) {
