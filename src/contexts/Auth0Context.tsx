@@ -94,41 +94,48 @@ export const AppContextProvider = ({ children }: { children: ReactNode }) => {
       await setCurrentUser(user.sub);
       console.log('Auth0 user:', user); // Debug log
 
-      // Fetch parent profile
-      const { data: parentData, error: parentError } = await supabase
-        .from('parent_profiles')
-        .select('*')
-        .eq('auth0_user_id', user.sub)
-        .single();
+      // Fetch parent profile via Edge Function (ensures RLS context)
+      const { data: parentResp, error: parentFnError } = await supabase.functions.invoke('manage-profiles', {
+        body: {
+          action: 'get_parent',
+          auth0_user_id: user.sub,
+          profile_data: {}
+        }
+      });
 
-      console.log('Parent profile fetch result:', { parentData, parentError }); // Debug log
+      console.log('Parent profile fetch (edge):', { parentResp, parentFnError }); // Debug log
 
-      if (parentError && parentError.code !== 'PGRST116') {
-        console.error('Error fetching parent profile:', parentError);
-      } else if (parentData) {
-        setParentProfile(parentData);
+      if (parentFnError) {
+        console.error('Error fetching parent profile (edge):', parentFnError);
+      } else if (parentResp?.data) {
+        const fetchedParent = parentResp.data as ParentProfile;
+        setParentProfile(fetchedParent);
 
-        // Fetch children profiles
-        const { data: childrenData, error: childrenError } = await supabase
-          .from('children_profiles')
-          .select('*')
-          .eq('parent_id', parentData.id);
+        // Fetch children profiles via Edge Function
+        const { data: childrenResp, error: childrenFnError } = await supabase.functions.invoke('manage-profiles', {
+          body: {
+            action: 'get_children',
+            auth0_user_id: user.sub,
+            profile_data: { parent_id: fetchedParent.id }
+          }
+        });
 
-        if (childrenError) {
-          console.error('Error fetching children profiles:', childrenError);
+        if (childrenFnError) {
+          console.error('Error fetching children profiles (edge):', childrenFnError);
         } else {
-          setChildrenProfiles(childrenData || []);
+          const childrenData = (childrenResp?.data || []) as ChildProfile[];
+          setChildrenProfiles(childrenData);
           // Auto-select the first child if none is selected and we have children
-          if (childrenData && childrenData.length > 0 && !selectedChild) {
+          if (childrenData.length > 0 && !selectedChild) {
             setSelectedChild(childrenData[0]);
           }
         }
 
-        // Fetch voice subscription
+        // Fetch voice subscription (keep existing approach; optional)
         const { data: subscriptionData, error: subscriptionError } = await supabase
           .from('voice_subscriptions')
           .select('*')
-          .eq('parent_id', parentData.id)
+          .eq('parent_id', fetchedParent.id)
           .single();
 
         if (subscriptionError && subscriptionError.code !== 'PGRST116') {

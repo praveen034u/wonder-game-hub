@@ -15,9 +15,9 @@ const Index = () => {
       return;
     }
 
-    // Check if user has completed parent setup
+    // If no parent profile yet, proceed to child profile setup (we create parent profile automatically)
     if (!parentProfile) {
-      navigate('/parent-setup', { replace: true });
+      navigate('/profile', { replace: true });
       return;
     }
 

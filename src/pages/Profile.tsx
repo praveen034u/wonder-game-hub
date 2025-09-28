@@ -65,9 +65,9 @@ const Profile = () => {
 
       await refreshProfiles();
       
-      if (!selectedChild && data) {
+      if (!selectedChild && data?.data) {
         // Set the newly created child as selected
-        setSelectedChild(data);
+        setSelectedChild(data.data);
       }
       
       setIsEditing(false);
@@ -87,7 +87,7 @@ const Profile = () => {
     <div className="min-h-screen bg-gradient-to-br from-primary/20 to-secondary/20">
       <AppHeader 
         title="Child Profiles" 
-        showHomeButton={childrenProfiles && childrenProfiles.length > 0}
+        showHomeButton={true}
       />
       
       <div className="container mx-auto px-4 py-6 max-w-2xl">

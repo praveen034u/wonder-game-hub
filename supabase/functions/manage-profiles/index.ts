@@ -129,6 +129,20 @@ serve(async (req) => {
       });
     }
 
+    if (action === 'get_parent') {
+      const { data, error } = await supabaseClient
+        .from('parent_profiles')
+        .select('*')
+        .eq('auth0_user_id', auth0_user_id)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      return new Response(JSON.stringify({ success: true, data }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     if (action === 'get_children') {
       const { parent_id } = profile_data;
       
