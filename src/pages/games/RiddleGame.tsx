@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAppContext } from "@/contexts/Auth0Context";
 import { useProgress } from "@/contexts/ProgressContext";
 import { useToast } from "@/hooks/use-toast";
 import GameRoomPanel from "@/components/Multiplayer/GameRoomPanel";
@@ -27,7 +27,7 @@ const RiddleGame = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { gameId } = useParams();
-  const { activeProfile } = useAuth();
+  const { selectedChild } = useAppContext();
   const { updateGameResult } = useProgress();
   const { toast } = useToast();
 
@@ -60,12 +60,12 @@ const RiddleGame = () => {
 
   useEffect(() => {
     // Automatically start the game when component mounts
-    const playerName = activeProfile?.name || 'Player';
+    const playerName = selectedChild?.name || 'Player';
     const newPlayers: Player[] = [
       {
-        id: activeProfile?.id || 'player1',
+        id: selectedChild?.id || 'player1',
         name: playerName,
-        avatar: activeProfile?.avatar || '👤',
+        avatar: selectedChild?.avatar || '👤',
         score: 0
       },
       {
@@ -152,7 +152,7 @@ const RiddleGame = () => {
     // Update player score
     if (isCorrect) {
       setPlayers(prev => prev.map(p => 
-        p.id === (activeProfile?.id || 'player1') ? { ...p, score: p.score + 1 } : p
+        p.id === (selectedChild?.id || 'player1') ? { ...p, score: p.score + 1 } : p
       ));
     }
 
@@ -204,7 +204,7 @@ const RiddleGame = () => {
   const finishGame = () => {
     setGamePhase('complete');
     
-    const playerScore = players.find(p => p.id === (activeProfile?.id || 'player1'))?.score || 0;
+    const playerScore = players.find(p => p.id === (selectedChild?.id || 'player1'))?.score || 0;
     const totalQuestions = currentRiddleIndex + 1;
     
     // Calculate stars (1-3 based on percentage)
@@ -215,7 +215,7 @@ const RiddleGame = () => {
 
     const gameResult: GameResult = {
       gameId: 'riddle',
-      profileId: activeProfile?.id || '',
+      profileId: selectedChild?.id || '',
       difficulty,
       correct: playerScore,
       total: totalQuestions,
@@ -266,7 +266,7 @@ const RiddleGame = () => {
 
   // Game Complete Phase
   if (gamePhase === 'complete') {
-    const playerScore = players.find(p => p.id === (activeProfile?.id || 'player1'))?.score || 0;
+    const playerScore = players.find(p => p.id === (selectedChild?.id || 'player1'))?.score || 0;
     const totalQuestions = currentRiddleIndex + 1;
     const percentage = (playerScore / totalQuestions) * 100;
     let starsEarned = 1;
@@ -281,7 +281,7 @@ const RiddleGame = () => {
           <CardHeader className="text-center">
             <div className="text-6xl mb-4">🎉</div>
             <CardTitle className="text-2xl font-fredoka text-primary">
-              Great Job, {activeProfile?.name || 'Player'}!
+              Great Job, {selectedChild?.name || 'Player'}!
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6 text-center">
