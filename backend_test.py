@@ -21,10 +21,11 @@ class SupabaseTestSuite:
         self.supabase_url = os.getenv('VITE_SUPABASE_URL')
         self.supabase_key = os.getenv('VITE_SUPABASE_PUBLISHABLE_KEY')
         
-        # Test data
-        self.test_child_1 = str(uuid.uuid4())
-        self.test_child_2 = str(uuid.uuid4())
-        self.test_child_3 = str(uuid.uuid4())
+        # Use realistic test data that might exist in the database
+        # Instead of random UUIDs, use simple test IDs that could be real
+        self.test_child_1 = "test-child-1"
+        self.test_child_2 = "test-child-2" 
+        self.test_child_3 = "test-child-3"
         
         # Mock auth token (in real scenario this would be from Supabase auth)
         self.auth_token = "mock_auth_token_for_testing"
@@ -36,6 +37,8 @@ class SupabaseTestSuite:
         
         print(f"Testing Supabase functions at: {self.supabase_url}")
         print(f"Backend URL: {self.base_url}")
+        print("⚠️  NOTE: Tests may fail due to missing test data in database")
+        print("⚠️  Foreign key constraints require existing children_profiles records")
 
     def test_friends_management(self) -> Dict[str, Any]:
         """Test all friends management functions"""
