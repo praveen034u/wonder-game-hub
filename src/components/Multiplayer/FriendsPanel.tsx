@@ -9,6 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAppContext } from "@/contexts/Auth0Context";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { Search } from "lucide-react";
 
 interface Friend {
   id: string;
@@ -335,8 +336,9 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
         <Tabs defaultValue="friends" className="w-full">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="friends">Friends</TabsTrigger>
-            <TabsTrigger value="search">
-              Find New Friends
+            <TabsTrigger value="search" className="flex items-center gap-2">
+              <Search className="h-4 w-4" />
+              Search Users
               <Badge variant="secondary" className="ml-1 text-xs">
                 {onlineUsers.length}
               </Badge>
@@ -399,14 +401,6 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
                 className="flex items-center gap-2"
               >
                 🔄 Refresh
-              </Button>
-              <Button
-                onClick={() => setShowSearch(!showSearch)}
-                size="sm"
-                variant="ghost"
-                className="flex items-center gap-2"
-              >
-                {showSearch ? '👥 Show Online' : '🔍 Search Users'}
               </Button>
             </div>
 
