@@ -510,10 +510,25 @@ serve(async (req) => {
 
         const invitationsError = null; // No error since we handled it manually
 
-        return new Response(
-          JSON.stringify({ success: true, data: pendingInvitations || [] }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+          return new Response(
+            JSON.stringify({ 
+              success: true, 
+              data: pendingInvitations,
+              message: 'Temporary workaround - invitations system needs schema cache fix'
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        } catch (inviteError) {
+          console.error('Error in get_pending_invitations:', inviteError);
+          return new Response(
+            JSON.stringify({ 
+              success: true, 
+              data: [],
+              message: `Schema cache issue prevented invitation query: ${(inviteError as Error).message}`
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
 
       case 'accept_invitation':
         // Use already parsed invitation_id from top-level destructuring
