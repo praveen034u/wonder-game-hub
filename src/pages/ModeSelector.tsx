@@ -16,7 +16,7 @@ const ModeSelector = () => {
       
       <div className="container mx-auto px-4 py-6">
         {/* Header */}
-        <div className="text-center mb-8 mt-4">
+        <div className="text-center mb-8 mt-16">
           <h1 className="text-4xl font-fredoka font-bold text-primary">
             Hello {selectedChild?.name || 'Friend'}! 👋
           </h1>
