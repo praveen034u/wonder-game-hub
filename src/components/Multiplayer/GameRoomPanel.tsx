@@ -91,16 +91,33 @@ const GameRoomPanel = ({ roomCode, gameId, onPlayerJoin, players: externalPlayer
           .select('*')
           .eq('room_id', room.id);
 
-        if (participants) {
+        // Build list from DB participants
+        let finalPlayers: Player[] = [];
+        if (participants && participants.length > 0) {
           const playerList = participants.map(p => ({
             id: p.child_id || p.id,
             name: p.player_name,
             avatar: p.player_avatar,
             isAI: p.is_ai,
-            status: 'active' as const
+            status: 'active' as const,
           }));
-          setPlayers(playerList);
+
+          // If only one real player, merge AI from externalPlayers so the kid always has an AI friend
+          const aiFromExternal = (externalPlayers || []).filter(p => p.isAI);
+          if (participants.length === 1 && aiFromExternal.length > 0) {
+            const merged = [...playerList, ...aiFromExternal];
+            // de-dupe by id
+            const seen = new Set<string>();
+            finalPlayers = merged.filter(p => (seen.has(p.id) ? false : (seen.add(p.id), true)));
+          } else {
+            finalPlayers = playerList;
+          }
+        } else {
+          // No participants in DB: fall back to external players (local) so we always show kid + AI
+          finalPlayers = externalPlayers || [];
         }
+
+        setPlayers(finalPlayers);
 
         // Get pending join requests
         const { data: requests } = await supabase
