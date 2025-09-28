@@ -32,7 +32,7 @@ export const LoginButton = () => {
     <Button 
       onClick={handleLogin} 
       disabled={isLoading}
-      className="w-full"
+      className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white border-0 shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 py-6 text-lg font-medium rounded-2xl"
       size="lg"
     >
       <LogIn className="w-5 h-5 mr-2" />
