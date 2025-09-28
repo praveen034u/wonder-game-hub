@@ -403,7 +403,7 @@ const GameRoomModal = ({ isOpen, onClose, gameId, difficulty, onStartGame, invit
                           <div key={friend.id} className="flex items-center gap-2 text-sm">
                             <Avatar className="w-6 h-6">
                               <AvatarImage src={friend.avatar} />
-                              <AvatarFallback>{friend.name[0]}</AvatarFallback>
+                              <AvatarFallback>{friend.name?.[0] || '?'}</AvatarFallback>
                             </Avatar>
                             <span>{friend.name}</span>
                             <Badge variant={friend.status === 'online' ? 'default' : friend.status === 'in-game' ? 'secondary' : 'outline'} className="text-xs">
@@ -445,7 +445,7 @@ const GameRoomModal = ({ isOpen, onClose, gameId, difficulty, onStartGame, invit
 
                     <div className="max-h-32 overflow-y-auto space-y-1">
                       {friends.filter(friend => 
-                        friend.name.toLowerCase().includes(searchQuery.toLowerCase())
+                        friend.name && friend.name.toLowerCase().includes(searchQuery.toLowerCase())
                       ).map((friend) => (
                         <div key={friend.id} className="flex items-center space-x-2">
                           <Checkbox
@@ -462,7 +462,7 @@ const GameRoomModal = ({ isOpen, onClose, gameId, difficulty, onStartGame, invit
                           <div className="flex items-center gap-2 flex-1">
                             <Avatar className="w-6 h-6">
                               <AvatarImage src={friend.avatar} />
-                              <AvatarFallback>{friend.name[0]}</AvatarFallback>
+                              <AvatarFallback>{friend.name?.[0] || '?'}</AvatarFallback>
                             </Avatar>
                             <span className="text-sm">{friend.name}</span>
                             <Badge variant={friend.status === 'online' ? 'default' : friend.status === 'in-game' ? 'secondary' : 'outline'} className="text-xs">
@@ -474,7 +474,7 @@ const GameRoomModal = ({ isOpen, onClose, gameId, difficulty, onStartGame, invit
 
                       {/* Online Users */}
                       {onlineUsers.filter(user => 
-                        user.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
+                        user.name && user.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
                         !friends.some(f => f.child_id === user.id) &&
                         user.id !== selectedChild?.id
                       ).map((user) => (
@@ -494,7 +494,7 @@ const GameRoomModal = ({ isOpen, onClose, gameId, difficulty, onStartGame, invit
                           <div className="flex items-center gap-2 flex-1">
                             <Avatar className="w-6 h-6">
                               <AvatarImage src={user.avatar} />
-                              <AvatarFallback>{user.name[0]}</AvatarFallback>
+                              <AvatarFallback>{user.name?.[0] || '?'}</AvatarFallback>
                             </Avatar>
                             <span className={`text-sm ${user.status === 'in-game' || user.in_room ? 'text-muted-foreground' : ''}`}>
                               {user.name}
