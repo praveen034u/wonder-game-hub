@@ -513,7 +513,7 @@ serve(async (req) => {
         );
 
       case 'accept_invitation':
-        const { invitation_id } = await req.json();
+        // Use already parsed invitation_id from top-level destructuring
         
         // Get the invitation details
         const { data: invitation } = await supabase
