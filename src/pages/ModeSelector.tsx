@@ -109,7 +109,7 @@ const ModeSelector = () => {
               </div>
             </div>
             <Button variant="story" size="kidXl" className="w-full mt-6">
-              📖 Read Stories!
+              📖 Create your own Stories!
             </Button>
           </CardContent>
         </Card>
