@@ -17,6 +17,7 @@ const GameDashboard = () => {
   const [showMultiplayerModal, setShowMultiplayerModal] = useState(false);
   const [selectedGame, setSelectedGame] = useState<{ id: string; difficulty: string } | null>(null);
   const [isFriendsPanelExpanded, setIsFriendsPanelExpanded] = useState(true);
+  const [pendingInvites, setPendingInvites] = useState<string[] | null>(null);
 
   const enabledGames = gamesConfig.filter(game => game.enabled);
 
@@ -38,8 +39,14 @@ const GameDashboard = () => {
   };
 
   const handleInviteFriend = (friendIds: string[]) => {
-    // Logic to invite friends to current game
-    console.log('Inviting friends:', friendIds);
+    setPendingInvites(friendIds);
+    // If no game selected, default to the first enabled game
+    if (!selectedGame) {
+      const firstGame = enabledGames[0];
+      const difficulty = (firstGame && selectedDifficulties[firstGame.id]) || 'easy';
+      if (firstGame) setSelectedGame({ id: firstGame.id, difficulty });
+    }
+    setShowMultiplayerModal(true);
   };
 
   return (
@@ -159,18 +166,20 @@ const GameDashboard = () => {
          </div>
 
          {/* Multiplayer Modal */}
-         {showMultiplayerModal && selectedGame && (
-           <GameRoomModal
-             isOpen={showMultiplayerModal}
-             onClose={() => {
-               setShowMultiplayerModal(false);
-               setSelectedGame(null);
-             }}
-             gameId={selectedGame.id}
-             difficulty={selectedGame.difficulty}
-             onStartGame={handleStartMultiplayerGame}
-           />
-         )}
+          {showMultiplayerModal && selectedGame && (
+            <GameRoomModal
+              isOpen={showMultiplayerModal}
+              onClose={() => {
+                setShowMultiplayerModal(false);
+                setSelectedGame(null);
+                setPendingInvites(null);
+              }}
+              gameId={selectedGame.id}
+              difficulty={selectedGame.difficulty}
+              onStartGame={handleStartMultiplayerGame}
+              invitedFriendIds={pendingInvites || []}
+            />
+          )}
        </div>
      </div>
    );

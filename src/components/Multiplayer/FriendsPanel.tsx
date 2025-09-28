@@ -68,7 +68,7 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
       loadFriendRequests();
       loadOnlineUsers();
 
-      // Set up real-time subscription for friends updates
+      // Set up real-time subscription for friends updates (no filter; we filter in callback)
       const friendsChannel = supabase
         .channel('friends-changes')
         .on(
@@ -77,12 +77,14 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
             event: '*',
             schema: 'public',
             table: 'friends',
-            filter: `requester_id=eq.${selectedChild.id},addressee_id=eq.${selectedChild.id}`
           },
           (payload) => {
-            console.log('Friends table changed:', payload);
-            // Refresh friends list when there's a change
-            loadFriends();
+            const rec: any = payload.new || payload.old;
+            if (!rec) return;
+            if (rec.requester_id === selectedChild.id || rec.addressee_id === selectedChild.id) {
+              loadFriends();
+              loadFriendRequests();
+            }
           }
         )
         .subscribe();
@@ -132,8 +134,18 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
           });
         }
       }
+      // Merge online status from current onlineUsers state
+      const merged = friendsList.map((f) => {
+        const online = onlineUsers.find(u => u.id === f.child_id)?.status || 'offline';
+        return { ...f, status: online as Friend['status'] };
+      })
+      // Sort: online first, then by name
+      .sort((a, b) => {
+        if (a.status === b.status) return a.name.localeCompare(b.name);
+        return a.status === 'online' ? -1 : 1;
+      });
 
-      setFriends(friendsList);
+      setFriends(merged);
     } catch (error) {
       console.error('Error loading friends:', error);
       toast({
@@ -186,6 +198,11 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
           status,
           last_seen: child.last_seen_at || child.updated_at
         };
+      })
+      // Sort: online first, then by name
+      .sort((a: OnlineUser, b: OnlineUser) => {
+        if (a.status === b.status) return a.name.localeCompare(b.name);
+        return a.status === 'online' ? -1 : 1;
       });
 
       setOnlineUsers(onlineUsersList);
@@ -404,6 +421,11 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
           </TabsList>
           
           <TabsContent value="friends" className="space-y-4">
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={() => { loadFriends(); loadOnlineUsers(); }}>
+                🔄 Refresh
+              </Button>
+            </div>
             {selectedUsers.length > 0 && (
               <div className="flex items-center justify-between bg-secondary/20 rounded-lg p-3">
                 <span className="text-sm font-medium">{selectedUsers.length} selected</span>
@@ -460,6 +482,11 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
           </TabsContent>
 
           <TabsContent value="requests" className="space-y-4">
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={loadFriendRequests}>
+                🔄 Refresh
+              </Button>
+            </div>
             <ScrollArea className="h-60">
               <div className="space-y-2">
                 {friendRequests.map((request) => (

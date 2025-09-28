@@ -24,9 +24,10 @@ interface GameRoomModalProps {
   gameId: string;
   difficulty: string;
   onStartGame: (roomId: string) => void;
+  invitedFriendIds?: string[];
 }
 
-const GameRoomModal = ({ isOpen, onClose, gameId, difficulty, onStartGame }: GameRoomModalProps) => {
+const GameRoomModal = ({ isOpen, onClose, gameId, difficulty, onStartGame, invitedFriendIds = [] }: GameRoomModalProps) => {
   const { selectedChild, childrenProfiles, setSelectedChild, refreshProfiles } = useAppContext();
   const { toast } = useToast();
   const [players, setPlayers] = useState<Player[]>([]);
@@ -82,13 +83,15 @@ const GameRoomModal = ({ isOpen, onClose, gameId, difficulty, onStartGame }: Gam
     try {
       setIsCreating(true);
       
+      const friendIds = invitedFriendIds.filter(Boolean);
       const { data } = await supabase.functions.invoke('manage-game-rooms', {
         body: {
           action: 'create_room',
           child_id: activeChild.id,
           game_id: gameId,
           difficulty,
-          room_name: customRoomName
+          room_name: customRoomName,
+          friend_ids: friendIds
         }
       });
 
@@ -117,6 +120,20 @@ const GameRoomModal = ({ isOpen, onClose, gameId, difficulty, onStartGame }: Gam
           title: "Room Created!",
           description: `Room code: ${room.room_code}`,
         });
+
+        // Invite friends if any were selected
+        if (friendIds.length > 0) {
+          await supabase.functions.invoke('manage-game-rooms', {
+            body: {
+              action: 'invite_friends',
+              room_id: room.id,
+              child_id: activeChild.id,
+              friend_ids: friendIds
+            }
+          });
+          toast({ title: 'Invites Sent', description: `Invited ${friendIds.length} friend(s)` });
+        }
+
         setActiveTab("room");
       } else {
         throw new Error(data?.error || 'Failed to create room');
