@@ -539,8 +539,8 @@ serve(async (req) => {
       case 'accept_invitation':
         // Use already parsed invitation_id from top-level destructuring
         
-        // Get the invitation details
-        const { data: invitation } = await supabase
+        // Get the invitation details using service role to bypass RLS
+        const { data: invitation } = await supabaseServiceRole
           .from('join_requests')
           .select('*')
           .eq('id', invitation_id)
@@ -555,8 +555,8 @@ serve(async (req) => {
           );
         }
 
-        // Get the game room details manually
-        const { data: gameRoom } = await supabase
+        // Get the game room details manually using service role
+        const { data: gameRoom } = await supabaseServiceRole
           .from('game_rooms')
           .select('*')
           .eq('room_code', invitation.room_code)
