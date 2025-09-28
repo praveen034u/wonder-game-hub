@@ -21,11 +21,10 @@ class SupabaseTestSuite:
         self.supabase_url = os.getenv('VITE_SUPABASE_URL')
         self.supabase_key = os.getenv('VITE_SUPABASE_PUBLISHABLE_KEY')
         
-        # Use realistic test data that might exist in the database
-        # Generate proper UUIDs for testing
-        self.test_child_1 = str(uuid.uuid4())
-        self.test_child_2 = str(uuid.uuid4()) 
-        self.test_child_3 = str(uuid.uuid4())
+        # Use real child IDs that exist in the database
+        self.test_child_1 = "a6770634-3be5-4469-94b2-5f9b72f79a47"  # bhavya
+        self.test_child_2 = "cb8bf3d1-57a4-4d12-9427-869a4eb3770d"  # Shivam
+        self.test_child_3 = "3fedd400-7d90-4c33-86e5-350b5827ff71"  # Jjj
         
         # Mock auth token (in real scenario this would be from Supabase auth)
         self.auth_token = "mock_auth_token_for_testing"
