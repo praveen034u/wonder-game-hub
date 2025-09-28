@@ -170,14 +170,16 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Friends system - database operations"
     - "Game rooms system - database operations"
     - "Friends Panel UI - request workflow"
     - "Game Room Panel UI - invitations and room management"
   stuck_tasks:
+    - "Game rooms system - database operations"
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
     -agent: "main"
     -message: "Initial assessment complete. Need to test both friends system and game invitations system to identify specific issues in the workflows. Both backend functions and frontend components are implemented but need testing to verify functionality."
+    -agent: "testing"
+    -message: "BACKEND TESTING COMPLETE: Friends system is fully functional ✅. Game rooms system has critical database schema issues ❌ - missing relationship between join_requests and game_rooms tables prevents invitation notifications from working. Core room operations (create, join, AI integration) work properly but invitation workflow is broken. Main agent should focus on fixing the database schema relationship and handle_join_request parsing issue."
