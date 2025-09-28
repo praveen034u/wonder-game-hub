@@ -136,7 +136,9 @@ const StoryDashboard = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-secondary/20 via-accent/20 to-primary/20 p-4">
+    <>
+      <AppHeader title="Story Dashboard" />
+      <div className="min-h-screen bg-gradient-to-br from-secondary/20 via-accent/20 to-primary/20 p-4">
       {/* Voice Selection Panel */}
       <div
         className={`fixed right-0 top-0 h-full w-80 bg-white shadow-xl transform transition-transform duration-300 z-50 ${
@@ -280,9 +282,10 @@ const StoryDashboard = () => {
               </CardContent>
             </Card>
           ))}
-        </div>
+         </div>
+       </div>
       </div>
-    </div>
+    </>
   );
 };
 

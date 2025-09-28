@@ -60,15 +60,6 @@ export const AppHeader = ({
 
           <div className="flex items-center gap-2">
             <ChildSwitcher />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigate('/profile')}
-              className="flex items-center gap-2"
-            >
-              <User className="w-4 h-4" />
-              Children
-            </Button>
             {showHomeButton && !isHomePage && (
               <Button 
                 variant="outline" 
