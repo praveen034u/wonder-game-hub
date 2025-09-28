@@ -492,21 +492,40 @@ serve(async (req) => {
         });
 
       case 'get_pending_invitations':
-        // Get pending join requests for the child using room_id foreign key
-        const { data: pendingInvitations, error: invitationsError } = await supabase
+        // Get pending join requests for the child and manually join with game_rooms
+        const { data: joinRequests, error: requestsError } = await supabase
           .from('join_requests')
           .select(`
             id,
             room_code,
-            room_id,
             player_name,
             player_avatar,
-            created_at,
-            game_rooms!join_requests_room_id_fkey(game_id, difficulty, host_child_id, status)
+            created_at
           `)
           .eq('child_id', child_id)
-          .eq('status', 'pending')
-          .eq('game_rooms.status', 'waiting');
+          .eq('status', 'pending');
+
+        if (requestsError) throw requestsError;
+
+        // Manually join with game_rooms data
+        const pendingInvitations = [];
+        for (const request of joinRequests || []) {
+          const { data: gameRoom } = await supabase
+            .from('game_rooms')
+            .select('game_id, difficulty, host_child_id, status')
+            .eq('room_code', request.room_code)
+            .eq('status', 'waiting')
+            .single();
+
+          if (gameRoom) {
+            pendingInvitations.push({
+              ...request,
+              game_rooms: gameRoom
+            });
+          }
+        }
+
+        const invitationsError = null; // No error since we handled it manually
 
         if (invitationsError) throw invitationsError;
 
