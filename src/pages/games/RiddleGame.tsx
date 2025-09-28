@@ -102,7 +102,6 @@ const RiddleGame = () => {
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [showFeedback, setShowFeedback] = useState(false);
   const [countdown, setCountdown] = useState(3);
-  const [showScoreboard, setShowScoreboard] = useState(false);
 
   // Get riddles for selected category and difficulty
   const getCategoryRiddles = (category: string) => {
@@ -173,14 +172,13 @@ const RiddleGame = () => {
       });
     }
 
-    // Show scoreboard after each question
+    // Show next question after feedback delay
     setTimeout(() => {
-      setShowScoreboard(true);
+      nextQuestion();
     }, 2000);
   };
 
   const nextQuestion = () => {
-    setShowScoreboard(false);
     if (currentRiddleIndex < gameRiddles.length - 1) {
       setCurrentRiddleIndex(prev => prev + 1);
       setSelectedAnswer(null);
@@ -238,7 +236,6 @@ const RiddleGame = () => {
     setCurrentRiddleIndex(0);
     setSelectedAnswer(null);
     setShowFeedback(false);
-    setShowScoreboard(false);
     setPlayers([]);
   };
 
@@ -263,56 +260,6 @@ const RiddleGame = () => {
             </div>
           </CardContent>
         </Card>
-      </div>
-    );
-  }
-
-  // Scoreboard Phase
-  if (showScoreboard) {
-    const sortedPlayers = [...players].sort((a, b) => b.score - a.score);
-    
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-primary/20 via-secondary/20 to-accent/20 p-4">
-        <div className="max-w-md mx-auto">
-          <Card className="bg-white/90 shadow-xl">
-            <CardHeader className="text-center">
-              <CardTitle className="text-2xl font-fredoka text-primary">
-                {selectedCategory} Challenge
-              </CardTitle>
-              <div className="flex justify-center space-x-2 mt-2">
-                <span className="text-2xl">🐄</span>
-                <span className="text-2xl">🐵</span>
-                <span className="text-2xl">🐘</span>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="text-center">
-                <h3 className="text-lg font-medium text-primary mb-4">Current Scores</h3>
-                <div className="space-y-3">
-                  {sortedPlayers.map((player, index) => (
-                    <div key={player.id} className="flex items-center justify-between bg-secondary/10 rounded-lg p-3">
-                      <div className="flex items-center space-x-3">
-                        <Avatar className="w-8 h-8">
-                          <AvatarFallback className="text-lg">{player.avatar}</AvatarFallback>
-                        </Avatar>
-                        <span className="font-medium text-primary">{player.name}</span>
-                      </div>
-                      <span className="text-xl font-bold text-primary">{player.score}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              
-              <Button 
-                onClick={nextQuestion}
-                className="w-full bg-primary hover:bg-primary/90 text-white mt-6"
-                size="lg"
-              >
-                {currentRiddleIndex < gameRiddles.length - 1 ? "Next Question →" : "Finish Game 🏆"}
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
       </div>
     );
   }
