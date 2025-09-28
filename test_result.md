@@ -126,7 +126,7 @@ backend:
     implemented: true
     working: false
     file: "/app/frontend/supabase/functions/manage-game-rooms/index.ts"
-    stuck_count: 1
+    stuck_count: 2
     priority: "high"
     needs_retesting: false
     status_history:
@@ -136,6 +136,9 @@ backend:
         -working: false
         -agent: "testing"
         -comment: "❌ PARTIALLY WORKING: Core room functions work (create_room ✅, join_room ✅, invite_friends ✅, request_to_join ✅) with proper AI player integration. However, CRITICAL ISSUES: 1) get_pending_invitations fails with database schema error 'Could not find a relationship between join_requests and game_rooms in the schema cache' 2) handle_join_request has parsing issues. These prevent the invitation workflow from completing properly."
+        -working: false
+        -agent: "testing"
+        -comment: "❌ CRITICAL SCHEMA ISSUE PERSISTS: After testing the reported fixes, the database schema error 'Could not find a relationship between join_requests and game_rooms in the schema cache' still occurs. The foreign key constraint 'join_requests_room_id_fkey' between join_requests.room_id and game_rooms.id is missing from the database schema. This prevents get_pending_invitations from working and blocks the entire invitation workflow. All 3 reported fixes (database schema, parsing, invitation workflow) are NOT working. The code changes were made but the underlying database schema relationship is still missing."
 
 frontend:
   - task: "Friends Panel UI - request workflow"
