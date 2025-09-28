@@ -8,6 +8,7 @@ import gamesConfig from "@/config/games.config.json";
 import GameRoomModal from "@/components/Multiplayer/GameRoomModal";
 import FriendsPanel from "@/components/Multiplayer/FriendsPanel";
 import JoinRequestButton from "@/components/Multiplayer/JoinRequestButton";
+import { AppHeader } from "@/components/Navigation/AppHeader";
 
 const GameDashboard = () => {
   const navigate = useNavigate();
@@ -42,8 +43,10 @@ const GameDashboard = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/20 via-secondary/20 to-accent/20 p-4">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-primary/20 via-secondary/20 to-accent/20">
+      <AppHeader title="Game Center" showBackButton />
+      
+      <div className="container mx-auto px-4 py-6 max-w-7xl">
         <div className="relative flex flex-col lg:flex-row gap-6">
           {/* Main Content - Full Width */}
           <div className="flex-1">
@@ -184,31 +187,31 @@ const GameDashboard = () => {
               >
                 {isFriendsPanelExpanded ? '👉' : '👈'}
               </Button>
-              
-              {/* Friends Panel Content */}
-              <div className="h-full p-4 overflow-y-auto">
-                <FriendsPanel onInviteFriend={handleInviteFriend} />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+               
+               {/* Friends Panel Content */}
+               <div className="h-full p-4 overflow-y-auto">
+                 <FriendsPanel onInviteFriend={handleInviteFriend} />
+               </div>
+             </div>
+           </div>
+         </div>
 
-      {/* Multiplayer Modal */}
-      {showMultiplayerModal && selectedGame && (
-        <GameRoomModal
-          isOpen={showMultiplayerModal}
-          onClose={() => {
-            setShowMultiplayerModal(false);
-            setSelectedGame(null);
-          }}
-          gameId={selectedGame.id}
-          difficulty={selectedGame.difficulty}
-          onStartGame={handleStartMultiplayerGame}
-        />
-      )}
-    </div>
-  );
+         {/* Multiplayer Modal */}
+         {showMultiplayerModal && selectedGame && (
+           <GameRoomModal
+             isOpen={showMultiplayerModal}
+             onClose={() => {
+               setShowMultiplayerModal(false);
+               setSelectedGame(null);
+             }}
+             gameId={selectedGame.id}
+             difficulty={selectedGame.difficulty}
+             onStartGame={handleStartMultiplayerGame}
+           />
+         )}
+       </div>
+     </div>
+   );
 };
 
 export default GameDashboard;

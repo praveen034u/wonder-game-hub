@@ -6,9 +6,9 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAppAuth, useAppContext } from '@/contexts/Auth0Context';
-import { LogoutButton } from '@/components/Auth/LogoutButton';
-import { User, LogOut } from 'lucide-react';
+import { User } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { AppHeader } from '@/components/Navigation/AppHeader';
 
 const AVATARS = ['🦄', '🐸', '🦋', '🐱', '🐶', '🦊', '🐯', '🐻'];
 const AGE_GROUPS = [
@@ -79,14 +79,13 @@ const Profile = () => {
   };
 
   return (
-    <div className="min-h-screen p-4 space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-fredoka font-bold text-primary">My Profile</h1>
-        <LogoutButton />
-      </div>
-
-      <div className="max-w-2xl mx-auto space-y-6">
+    <div className="min-h-screen bg-gradient-to-br from-primary/20 to-secondary/20">
+      <AppHeader 
+        title="Child Profiles" 
+        showHomeButton={childrenProfiles && childrenProfiles.length > 0}
+      />
+      
+      <div className="container mx-auto px-4 py-6 max-w-2xl">
         {/* Existing Children List */}
         {!isEditing && childrenProfiles.length > 0 && (
           <Card className="shadow-soft">

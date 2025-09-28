@@ -1,13 +1,12 @@
-import { useAuth } from '@/contexts/AuthContext';
+import { useAppAuth } from '@/contexts/Auth0Context';
 import { Navigate } from 'react-router-dom';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  requireProfile?: boolean;
 }
 
-const ProtectedRoute = ({ children, requireProfile = false }: ProtectedRouteProps) => {
-  const { isAuthenticated, activeProfile, isLoading } = useAuth();
+const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
+  const { isAuthenticated, isLoading } = useAppAuth();
 
   if (isLoading) {
     return (
@@ -18,11 +17,7 @@ const ProtectedRoute = ({ children, requireProfile = false }: ProtectedRouteProp
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
-
-  if (requireProfile && !activeProfile) {
-    return <Navigate to="/profile" replace />;
+    return <Navigate to="/auth" replace />;
   }
 
   return <>{children}</>;

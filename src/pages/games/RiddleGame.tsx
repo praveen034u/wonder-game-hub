@@ -9,6 +9,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useProgress } from "@/contexts/ProgressContext";
 import { useToast } from "@/hooks/use-toast";
 import GameRoomPanel from "@/components/Multiplayer/GameRoomPanel";
+import { AppHeader } from "@/components/Navigation/AppHeader";
 import riddlesData from "@/config/riddles.json";
 import type { Riddle, GameResult } from "@/types";
 
@@ -36,15 +37,18 @@ const RiddleGame = () => {
   // Only show riddle game if gameId matches
   if (gameId !== 'riddle') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/20 to-secondary/20">
-        <Card className="max-w-md mx-auto">
-          <CardContent className="text-center py-8">
-            <p className="text-lg">Game "{gameId}" not found.</p>
-            <Button onClick={() => navigate('/games')} className="mt-4">
-              Back to Games
-            </Button>
-          </CardContent>
-        </Card>
+      <div className="min-h-screen bg-gradient-to-br from-primary/20 to-secondary/20">
+        <AppHeader title="Game Not Found" showBackButton />
+        <div className="container mx-auto px-4 py-6 flex items-center justify-center">
+          <Card className="max-w-md mx-auto">
+            <CardContent className="text-center py-8">
+              <p className="text-lg">Game "{gameId}" not found.</p>
+              <Button onClick={() => navigate('/games')} className="mt-4">
+                Back to Games
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     );
   }

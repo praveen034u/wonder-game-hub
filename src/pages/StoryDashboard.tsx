@@ -8,6 +8,7 @@ import { useAppContext } from "@/contexts/Auth0Context";
 import { useState, useRef } from "react";
 import { useToast } from "@/components/ui/use-toast";
 import { VoiceSelectionPanel } from "@/components/VoiceClone/VoiceSelectionPanel";
+import { AppHeader } from "@/components/Navigation/AppHeader";
 
 const StoryDashboard = () => {
   const navigate = useNavigate();

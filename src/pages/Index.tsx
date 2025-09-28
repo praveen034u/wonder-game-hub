@@ -9,11 +9,6 @@ const Index = () => {
 
   useEffect(() => {
     if (isLoading) return;
-    
-    if (!isAuthenticated) {
-      navigate('/auth', { replace: true });
-      return;
-    }
 
     // Check if user has completed parent setup
     if (!parentProfile) {
@@ -27,9 +22,9 @@ const Index = () => {
       return;
     }
 
-    // If child profiles exist, redirect to mode selector
+    // If child profiles exist, redirect to game selection (modes)
     navigate('/modes', { replace: true });
-  }, [isAuthenticated, childrenProfiles, parentProfile, isLoading, navigate]);
+  }, [childrenProfiles, parentProfile, isLoading, navigate]);
 
   if (isLoading) {
     return (
