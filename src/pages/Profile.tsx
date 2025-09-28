@@ -129,6 +129,16 @@ const Profile = () => {
                 ))}
               </div>
               <div className="mt-4 text-center space-y-3">
+                {selectedChild && (
+                  <Button 
+                    variant="fun" 
+                    size="kid" 
+                    className="w-full"
+                    onClick={() => navigate('/modes')}
+                  >
+                    🎮 Continue with {selectedChild.name}
+                  </Button>
+                )}
                 <Button 
                   variant="outline"
                   onClick={() => {
@@ -140,14 +150,6 @@ const Profile = () => {
                   }}
                 >
                   ➕ Add Another Child
-                </Button>
-                <Button 
-                  variant="fun" 
-                  size="kid" 
-                  className="w-full"
-                  onClick={() => navigate('/modes')}
-                >
-                  🎮 Play Games & Stories
                 </Button>
               </div>
             </CardContent>

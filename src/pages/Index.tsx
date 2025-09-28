@@ -21,14 +21,8 @@ const Index = () => {
       return;
     }
 
-    // Check if user has any child profiles - if not, redirect to create profile
-    if (!childrenProfiles || childrenProfiles.length === 0) {
-      navigate('/profile', { replace: true });
-      return;
-    }
-
-    // If child profiles exist, redirect to game selection (modes)
-    navigate('/modes', { replace: true });
+    // Always redirect to profile page for child selection/creation
+    navigate('/profile', { replace: true });
   }, [childrenProfiles, parentProfile, isLoading, isLoadingProfiles, isAuthenticated, navigate]);
 
   if (isLoading || isLoadingProfiles) {

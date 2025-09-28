@@ -1,7 +1,8 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { LogoutButton } from '@/components/Auth/LogoutButton';
-import { Home, ArrowLeft } from 'lucide-react';
+import { Home, ArrowLeft, User } from 'lucide-react';
+import { ChildSwitcher } from './ChildSwitcher';
 
 interface AppHeaderProps {
   title?: string;
@@ -58,6 +59,16 @@ export const AppHeader = ({
           </div>
 
           <div className="flex items-center gap-2">
+            <ChildSwitcher />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate('/profile')}
+              className="flex items-center gap-2"
+            >
+              <User className="w-4 h-4" />
+              Children
+            </Button>
             {showHomeButton && !isHomePage && (
               <Button 
                 variant="outline" 
