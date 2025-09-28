@@ -40,7 +40,69 @@ class SupabaseTestSuite:
         print("⚠️  NOTE: Tests may fail due to missing test data in database")
         print("⚠️  Foreign key constraints require existing children_profiles records")
 
-    def test_friends_management(self) -> Dict[str, Any]:
+    def test_function_connectivity(self) -> Dict[str, Any]:
+        """Test basic connectivity to Supabase functions"""
+        results = {
+            'friends_function_accessible': False,
+            'rooms_function_accessible': False,
+            'errors': []
+        }
+        
+        friends_url = f"{self.supabase_url}/functions/v1/manage-friends"
+        rooms_url = f"{self.supabase_url}/functions/v1/manage-game-rooms"
+        
+        try:
+            # Test friends function with a simple list operation
+            print("\n=== Testing Friends Function Connectivity ===")
+            list_data = {
+                'action': 'list_friends',
+                'child_id': 'non-existent-id'  # This should return empty list, not error
+            }
+            
+            response = requests.post(friends_url, json=list_data, headers=self.headers)
+            print(f"Friends function response: {response.status_code}")
+            print(f"Response body: {response.text}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('success') is not None:  # Function responded properly
+                    results['friends_function_accessible'] = True
+                    print("✅ Friends function: ACCESSIBLE")
+                else:
+                    results['errors'].append("Friends function returned malformed response")
+                    print("❌ Friends function returned malformed response")
+            else:
+                results['errors'].append(f"Friends function HTTP error: {response.status_code}")
+                print(f"❌ Friends function HTTP error: {response.status_code}")
+
+            # Test rooms function with a simple get operation
+            print("\n=== Testing Rooms Function Connectivity ===")
+            get_data = {
+                'action': 'get_pending_invitations',
+                'child_id': 'non-existent-id'  # This should return empty list, not error
+            }
+            
+            response = requests.post(rooms_url, json=get_data, headers=self.headers)
+            print(f"Rooms function response: {response.status_code}")
+            print(f"Response body: {response.text}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('success') is not None:  # Function responded properly
+                    results['rooms_function_accessible'] = True
+                    print("✅ Rooms function: ACCESSIBLE")
+                else:
+                    results['errors'].append("Rooms function returned malformed response")
+                    print("❌ Rooms function returned malformed response")
+            else:
+                results['errors'].append(f"Rooms function HTTP error: {response.status_code}")
+                print(f"❌ Rooms function HTTP error: {response.status_code}")
+
+        except Exception as e:
+            results['errors'].append(f"Connectivity test exception: {str(e)}")
+            print(f"❌ Connectivity test exception: {str(e)}")
+        
+        return results
         """Test all friends management functions"""
         results = {
             'send_friend_request': False,
