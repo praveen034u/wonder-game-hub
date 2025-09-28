@@ -50,7 +50,7 @@ const GameDashboard = () => {
         <div className="relative flex flex-col lg:flex-row gap-6">
           {/* Main Content - Full Width */}
           <div className="flex-1">
-            <div className="text-center mb-8">
+            <div className="text-center mb-8 mt-16">
               <h1 className="text-4xl font-fredoka font-bold text-primary mb-2">
                 🎮 Game Time, {selectedChild?.name}!
               </h1>
@@ -144,7 +144,7 @@ const GameDashboard = () => {
               <Button
                 variant="ghost"
                 size="icon"
-                className="absolute -left-10 top-4 bg-white/95 shadow-md rounded-l-lg h-20"
+                className="absolute -left-10 top-24 bg-white/95 shadow-md rounded-l-lg h-20"
                 onClick={() => setIsFriendsPanelExpanded(!isFriendsPanelExpanded)}
               >
                 {isFriendsPanelExpanded ? '👉' : '👈'}
