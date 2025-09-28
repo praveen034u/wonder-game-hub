@@ -109,27 +109,33 @@ user_problem_statement: Fix friends panel friend request system and game invitat
 backend:
   - task: "Friends system - database operations"
     implemented: true
-    working: "unknown"
+    working: true
     file: "/app/frontend/supabase/functions/manage-friends/index.ts"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
         -working: "unknown"
         -agent: "main"
         -comment: "Backend friend management functions exist with send_friend_request, accept_friend_request, decline_friend_request, list_friends, get_friend_requests, search_children"
+        -working: true
+        -agent: "testing"
+        -comment: "✅ TESTED AND WORKING: All core friends management functions are working properly. send_friend_request creates friend requests successfully, accept_friend_request and decline_friend_request work correctly, list_friends returns accepted friends, get_friend_requests fetches pending requests, and search_children searches for users. Database operations and foreign key relationships are functioning correctly."
 
   - task: "Game rooms system - database operations"
     implemented: true
-    working: "unknown" 
+    working: false
     file: "/app/frontend/supabase/functions/manage-game-rooms/index.ts"
-    stuck_count: 0
+    stuck_count: 1
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
         -working: "unknown"
         -agent: "main"
         -comment: "Backend game room functions exist with create_room, join_room, invite_friends, handle_join_request, accept_invitation, decline_invitation, AI player integration"
+        -working: false
+        -agent: "testing"
+        -comment: "❌ PARTIALLY WORKING: Core room functions work (create_room ✅, join_room ✅, invite_friends ✅, request_to_join ✅) with proper AI player integration. However, CRITICAL ISSUES: 1) get_pending_invitations fails with database schema error 'Could not find a relationship between join_requests and game_rooms in the schema cache' 2) handle_join_request has parsing issues. These prevent the invitation workflow from completing properly."
 
 frontend:
   - task: "Friends Panel UI - request workflow"
