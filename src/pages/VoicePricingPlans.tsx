@@ -71,8 +71,9 @@ const VoicePricingPlans = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-secondary/20 via-accent/20 to-primary/20 p-4">
-      <div className="max-w-6xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-secondary/20 via-accent/20 to-primary/20">
+      <AppHeader title="Voice Cloning Plans" showBackButton />
+      <div className="max-w-6xl mx-auto p-4">
         <div className="text-center mb-12">
           <h1 className="text-4xl font-fredoka font-bold text-primary mb-4">
             🎙️ Voice Cloning Plans

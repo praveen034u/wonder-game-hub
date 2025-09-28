@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/use-toast";
+import { AppHeader } from "@/components/Navigation/AppHeader";
 import { useState } from "react";
 
 const PaymentPage = () => {
@@ -47,8 +48,9 @@ const PaymentPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-secondary/20 via-accent/20 to-primary/20 p-4">
-      <div className="max-w-md mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-secondary/20 via-accent/20 to-primary/20">
+      <AppHeader title="Complete Payment" showBackButton />
+      <div className="max-w-md mx-auto p-4">
         <Card className="shadow-xl">
           <CardHeader>
             <CardTitle className="text-2xl font-fredoka text-primary">
