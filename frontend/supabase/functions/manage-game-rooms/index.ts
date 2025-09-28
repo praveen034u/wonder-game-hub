@@ -523,7 +523,7 @@ serve(async (req) => {
           .from('join_requests')
           .select(`
             *,
-            game_rooms!inner(*)
+            game_rooms!join_requests_room_id_fkey(*)
           `)
           .eq('id', invitation_id)
           .eq('child_id', child_id)
