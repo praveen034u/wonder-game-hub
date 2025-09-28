@@ -1,0 +1,95 @@
+{
+  "Zoo Animals": {
+    "easy": [
+      {
+        "id": "zoo_1",
+        "question": "I'm tall with a long neck, I eat leaves from trees. I have spots all over me. What am I?",
+        "options": ["Elephant", "Giraffe", "Lion", "Monkey"],
+        "correctAnswer": 1,
+        "theme": "Zoo Animals",
+        "difficulty": "easy",
+        "hint": "I'm the tallest animal in the zoo!"
+      },
+      {
+        "id": "zoo_2", 
+        "question": "I have a trunk and I'm really big. I love to splash in the water. What am I?",
+        "options": ["Hippo", "Rhino", "Elephant", "Bear"],
+        "correctAnswer": 2,
+        "theme": "Zoo Animals",
+        "difficulty": "easy",
+        "hint": "I use my nose to pick things up!"
+      },
+      {
+        "id": "zoo_3",
+        "question": "I'm the king of the jungle with a big mane. I roar really loud! What am I?",
+        "options": ["Tiger", "Lion", "Leopard", "Cheetah"],
+        "correctAnswer": 1,
+        "theme": "Zoo Animals", 
+        "difficulty": "easy",
+        "hint": "I have a fluffy mane around my head!"
+      },
+      {
+        "id": "zoo_4",
+        "question": "I swing from branch to branch and I love bananas. What am I?",
+        "options": ["Monkey", "Sloth", "Bird", "Squirrel"],
+        "correctAnswer": 0,
+        "theme": "Zoo Animals",
+        "difficulty": "easy",
+        "hint": "I can hang by my tail!"
+      }
+    ],
+    "medium": [
+      {
+        "id": "zoo_5",
+        "question": "I'm black and white and I love to eat bamboo. I'm from China. What am I?",
+        "options": ["Zebra", "Penguin", "Panda", "Skunk"],
+        "correctAnswer": 2,
+        "theme": "Zoo Animals",
+        "difficulty": "medium",
+        "hint": "I roll around and play a lot!"
+      },
+      {
+        "id": "zoo_6",
+        "question": "I have black and white stripes, but I'm not a referee. I run on the savanna. What am I?",
+        "options": ["Horse", "Zebra", "Cow", "Donkey"],
+        "correctAnswer": 1,
+        "theme": "Zoo Animals",
+        "difficulty": "medium",
+        "hint": "Every one of us has a unique stripe pattern!"
+      }
+    ],
+    "hard": [
+      {
+        "id": "zoo_7",
+        "question": "I'm a big cat with orange fur and black stripes. I'm an excellent swimmer. What am I?",
+        "options": ["Lion", "Leopard", "Tiger", "Cheetah"],
+        "correctAnswer": 2,
+        "theme": "Zoo Animals",
+        "difficulty": "hard",
+        "hint": "Unlike most cats, I love water!"
+      }
+    ]
+  },
+  "Ocean Friends": {
+    "easy": [
+      {
+        "id": "ocean_1",
+        "question": "I'm the biggest animal in the ocean. I sing beautiful songs. What am I?",
+        "options": ["Shark", "Dolphin", "Whale", "Octopus"],
+        "correctAnswer": 2,
+        "theme": "Ocean Friends",
+        "difficulty": "easy",
+        "hint": "I'm not a fish, I'm a mammal!"
+      },
+      {
+        "id": "ocean_2",
+        "question": "I have eight arms and I can change colors. What am I?",
+        "options": ["Jellyfish", "Octopus", "Squid", "Starfish"],
+        "correctAnswer": 1,
+        "theme": "Ocean Friends",
+        "difficulty": "easy",
+        "hint": "I'm very smart and can solve puzzles!"
+      }
+    ]
+  }
+}
