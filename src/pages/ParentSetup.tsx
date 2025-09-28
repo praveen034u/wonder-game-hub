@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { useAppAuth, useAppContext } from '@/contexts/Auth0Context';
 import { Shield, Clock, Moon, ArrowRight } from 'lucide-react';
+import { AppHeader } from '@/components/Navigation/AppHeader';
 
 const ParentSetup = () => {
   const { user } = useAppAuth();
@@ -40,13 +41,14 @@ const ParentSetup = () => {
   };
 
   return (
-    <div className="min-h-screen p-4 space-y-6">
-      <div className="max-w-2xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-primary/20 to-secondary/20">
+      <AppHeader title="Parent Controls" showHomeButton={false} />
+      
+      <div className="container mx-auto px-4 py-6 max-w-2xl">
         <div className="text-center mb-8">
           <div className="w-16 h-16 mx-auto bg-gradient-primary rounded-full flex items-center justify-center mb-4">
             <Shield className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-3xl font-fredoka font-bold text-primary mb-2">Parent Controls</h1>
           <p className="text-muted-foreground font-comic">
             Set up screen time and bedtime controls for {selectedChild?.name} (Optional)
           </p>

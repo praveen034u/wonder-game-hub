@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useAppContext } from "@/contexts/Auth0Context";
 import { useState, useEffect } from "react";
 import { useToast } from "@/components/ui/use-toast";
+import { AppHeader } from "@/components/Navigation/AppHeader";
 
 interface StorySegment {
   text: string;
@@ -146,7 +147,9 @@ const StoryViewer = () => {
 
   if (storySegments.length === 0) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-secondary/20 via-accent/20 to-primary/20 p-4 flex items-center justify-center">
+      <>
+        <AppHeader title="Story Viewer" showBackButton />
+        <div className="min-h-screen bg-gradient-to-br from-secondary/20 via-accent/20 to-primary/20 p-4 flex items-center justify-center">
         <Card className="bg-white/90 p-8">
           <div className="text-center">
             <div className="text-6xl mb-4">📖</div>
@@ -156,14 +159,17 @@ const StoryViewer = () => {
             </Button>
           </div>
         </Card>
-      </div>
+        </div>
+      </>
     );
   }
 
   const currentStory = storySegments[currentSegment];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-secondary/20 via-accent/20 to-primary/20 p-4">
+    <>
+      <AppHeader title="Story Viewer" showBackButton />
+      <div className="min-h-screen bg-gradient-to-br from-secondary/20 via-accent/20 to-primary/20 p-4">
       <div className="max-w-4xl mx-auto">
         <div className="text-center mb-6">
           <h1 className="text-3xl font-fredoka font-bold text-primary mb-2">
@@ -262,7 +268,8 @@ const StoryViewer = () => {
           </Card>
         )}
       </div>
-    </div>
+      </div>
+    </>
   );
 };
 

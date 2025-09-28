@@ -2,18 +2,21 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { useAppContext, useAppAuth } from '@/contexts/Auth0Context';
+import { useAppContext } from '@/contexts/Auth0Context';
 import { Star, Gamepad2, BookOpen, User } from 'lucide-react';
+import { AppHeader } from '@/components/Navigation/AppHeader';
 
 const ModeSelector = () => {
   const { selectedChild } = useAppContext();
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen p-4 space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
+    <div className="min-h-screen bg-gradient-to-br from-primary/20 to-secondary/20">
+      <AppHeader title="StoryTeller Games" showHomeButton={false} />
+      
+      <div className="container mx-auto px-4 py-6">
+        {/* Header */}
+        <div className="text-center mb-8 mt-16">
           <h1 className="text-4xl font-fredoka font-bold text-primary">
             Hello {selectedChild?.name || 'Friend'}! 👋
           </h1>
@@ -21,28 +24,30 @@ const ModeSelector = () => {
             What would you like to do today?
           </p>
         </div>
-        <div className="flex gap-3">
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => navigate('/progress')}
-            className="rounded-full"
-          >
-            <Star className="w-5 h-5 text-secondary" />
-          </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => navigate('/profile')}
-            className="rounded-full"
-          >
-            <User className="w-5 h-5" />
-          </Button>
-        </div>
-      </div>
 
-      {/* Mode Cards */}
-      <div className="max-w-4xl mx-auto grid md:grid-cols-2 gap-8">
+        <div className="flex justify-center mb-6">
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => navigate('/progress')}
+              className="rounded-full"
+            >
+              <Star className="w-5 h-5 text-secondary" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => navigate('/profile')}
+              className="rounded-full"
+            >
+              <User className="w-5 h-5" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Mode Cards */}
+        <div className="max-w-4xl mx-auto grid md:grid-cols-2 gap-8">
         {/* Games Mode */}
         <Card 
           className="shadow-game border-2 hover:shadow-float transition-all duration-300 cursor-pointer group"
@@ -108,6 +113,7 @@ const ModeSelector = () => {
             </Button>
           </CardContent>
         </Card>
+        </div>
       </div>
     </div>
   );

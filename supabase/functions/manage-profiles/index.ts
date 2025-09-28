@@ -24,7 +24,7 @@ serve(async (req) => {
     }
 
     const { method, url } = req;
-    const { action, auth0_user_id, profile_data } = await req.json();
+    const { action, auth0_user_id, profile_data, child_id } = await req.json();
 
     // Set the Auth0 user ID for RLS policies
     await supabaseClient.rpc('set_config', {
@@ -40,6 +40,25 @@ serve(async (req) => {
         throw new Error('Email is required to create parent profile');
       }
 
+      // First check if profile already exists
+      const { data: existingProfile, error: fetchError } = await supabaseClient
+        .from('parent_profiles')
+        .select('*')
+        .eq('auth0_user_id', auth0_user_id)
+        .single();
+
+      if (fetchError && fetchError.code !== 'PGRST116') {
+        throw fetchError;
+      }
+
+      if (existingProfile) {
+        // Profile already exists, return it
+        return new Response(JSON.stringify({ success: true, data: existingProfile }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // Create new profile if it doesn't exist
       const { data, error } = await supabaseClient
         .from('parent_profiles')
         .insert({
@@ -110,6 +129,20 @@ serve(async (req) => {
       });
     }
 
+    if (action === 'get_parent') {
+      const { data, error } = await supabaseClient
+        .from('parent_profiles')
+        .select('*')
+        .eq('auth0_user_id', auth0_user_id)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      return new Response(JSON.stringify({ success: true, data }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     if (action === 'get_children') {
       const { parent_id } = profile_data;
       
@@ -123,6 +156,41 @@ serve(async (req) => {
       return new Response(JSON.stringify({ success: true, data }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+
+    if (action === 'set_child_online_status') {
+      // Update child's online status
+      const { data: statusUpdate, error: statusError } = await supabaseClient
+        .from('children_profiles')
+        .update({ 
+          is_online: profile_data.is_online,
+          last_seen_at: new Date().toISOString()
+        })
+        .eq('id', child_id)
+        .select()
+        .single();
+
+      if (statusError) throw statusError;
+
+      return new Response(
+        JSON.stringify({ success: true, data: statusUpdate }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'update_in_room_status') {
+      // Update child's in_room status
+      const { data, error } = await supabaseClient
+        .from('children_profiles')
+        .update({ in_room: profile_data.in_room })
+        .eq('id', child_id);
+
+      if (error) throw error;
+
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     return new Response(JSON.stringify({ error: 'Invalid action' }), {

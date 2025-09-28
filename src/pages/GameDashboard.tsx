@@ -7,14 +7,17 @@ import { useAppContext } from "@/contexts/Auth0Context";
 import gamesConfig from "@/config/games.config.json";
 import GameRoomModal from "@/components/Multiplayer/GameRoomModal";
 import FriendsPanel from "@/components/Multiplayer/FriendsPanel";
+import { AppHeader } from "@/components/Navigation/AppHeader";
 
 const GameDashboard = () => {
   const navigate = useNavigate();
-  const { selectedChild } = useAppContext();
+  const { selectedChild, childrenProfiles, setSelectedChild } = useAppContext();
   const [selectedDifficulties, setSelectedDifficulties] = useState<Record<string, string>>({});
   const [showMultiplayerModal, setShowMultiplayerModal] = useState(false);
   const [selectedGame, setSelectedGame] = useState<{ id: string; difficulty: string } | null>(null);
   const [isFriendsPanelExpanded, setIsFriendsPanelExpanded] = useState(true);
+  const [pendingInvites, setPendingInvites] = useState<string[] | null>(null);
+  
 
   const enabledGames = gamesConfig.filter(game => game.enabled);
 
@@ -35,29 +38,38 @@ const GameDashboard = () => {
     }
   };
 
-  const handleInviteFriend = (friendId: string) => {
-    // Logic to invite friend to current game
-    console.log('Inviting friend:', friendId);
+  const handleInviteFriend = (friendIds: string[]) => {
+    setPendingInvites(friendIds);
+    // If no game selected, default to the first enabled game
+    if (!selectedGame) {
+      const firstGame = enabledGames[0];
+      const difficulty = (firstGame && selectedDifficulties[firstGame.id]) || 'easy';
+      if (firstGame) setSelectedGame({ id: firstGame.id, difficulty });
+    }
+    setShowMultiplayerModal(true);
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/20 via-secondary/20 to-accent/20 p-4">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-primary/20 via-secondary/20 to-accent/20">
+      <AppHeader title="Game Center" showBackButton />
+      
+      <div className="container mx-auto px-4 py-6 max-w-7xl">
         <div className="relative flex flex-col lg:flex-row gap-6">
           {/* Main Content - Full Width */}
           <div className="flex-1">
-            <div className="text-center mb-8">
+            <div className="text-center mb-8 mt-16">
               <h1 className="text-4xl font-fredoka font-bold text-primary mb-2">
                 🎮 Game Time, {selectedChild?.name}!
               </h1>
               <p className="text-lg text-muted-foreground">Choose a fun game to play</p>
             </div>
 
+
             <div className="mb-6 text-center">
               <Button
                 variant="outline"
                 onClick={() => navigate('/stories')}
-                className="bg-white/80 hover:bg-white text-primary border-2 border-primary/30 mr-3"
+                className="bg-white/80 hover:bg-white text-primary border-2 border-primary/30"
               >
                 📚 Switch to Stories
               </Button>
@@ -138,36 +150,39 @@ const GameDashboard = () => {
               <Button
                 variant="ghost"
                 size="icon"
-                className="absolute -left-10 top-4 bg-white/95 shadow-md rounded-l-lg h-20"
+                className="absolute -left-10 top-24 bg-white/95 shadow-md rounded-l-lg h-20"
                 onClick={() => setIsFriendsPanelExpanded(!isFriendsPanelExpanded)}
               >
                 {isFriendsPanelExpanded ? '👉' : '👈'}
               </Button>
-              
-              {/* Friends Panel Content */}
-              <div className="h-full p-4 overflow-y-auto">
-                <FriendsPanel onInviteFriend={handleInviteFriend} />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+               
+               {/* Friends Panel Content */}
+               <div className="h-full p-4 overflow-y-auto">
+                 <FriendsPanel onInviteFriend={handleInviteFriend} />
+               </div>
+             </div>
+           </div>
+         </div>
 
-      {/* Multiplayer Modal */}
-      {showMultiplayerModal && selectedGame && (
-        <GameRoomModal
-          isOpen={showMultiplayerModal}
-          onClose={() => {
-            setShowMultiplayerModal(false);
-            setSelectedGame(null);
-          }}
-          gameId={selectedGame.id}
-          difficulty={selectedGame.difficulty}
-          onStartGame={handleStartMultiplayerGame}
-        />
-      )}
-    </div>
-  );
+
+          {/* Multiplayer Modal */}
+          {showMultiplayerModal && selectedGame && (
+            <GameRoomModal
+              isOpen={showMultiplayerModal}
+              onClose={() => {
+                setShowMultiplayerModal(false);
+                setSelectedGame(null);
+                setPendingInvites(null);
+              }}
+              gameId={selectedGame.id}
+              difficulty={selectedGame.difficulty}
+              onStartGame={handleStartMultiplayerGame}
+              invitedFriendIds={pendingInvites || []}
+            />
+          )}
+       </div>
+     </div>
+   );
 };
 
 export default GameDashboard;

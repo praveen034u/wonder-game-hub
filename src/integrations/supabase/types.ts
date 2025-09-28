@@ -20,8 +20,11 @@ export type Database = {
           avatar: string | null
           created_at: string
           id: string
+          is_online: boolean | null
+          last_seen_at: string | null
           name: string
           parent_id: string
+          room_id: string | null
           updated_at: string
           voice_clone_enabled: boolean | null
           voice_clone_url: string | null
@@ -31,8 +34,11 @@ export type Database = {
           avatar?: string | null
           created_at?: string
           id?: string
+          is_online?: boolean | null
+          last_seen_at?: string | null
           name: string
           parent_id: string
+          room_id?: string | null
           updated_at?: string
           voice_clone_enabled?: boolean | null
           voice_clone_url?: string | null
@@ -42,8 +48,11 @@ export type Database = {
           avatar?: string | null
           created_at?: string
           id?: string
+          is_online?: boolean | null
+          last_seen_at?: string | null
           name?: string
           parent_id?: string
+          room_id?: string | null
           updated_at?: string
           voice_clone_enabled?: boolean | null
           voice_clone_url?: string | null
@@ -54,6 +63,13 @@ export type Database = {
             columns: ["parent_id"]
             isOneToOne: false
             referencedRelation: "parent_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "children_profiles_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "game_rooms"
             referencedColumns: ["id"]
           },
         ]
@@ -190,6 +206,78 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      join_requests: {
+        Row: {
+          child_id: string
+          created_at: string
+          id: string
+          player_avatar: string | null
+          player_name: string
+          room_code: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          child_id: string
+          created_at?: string
+          id?: string
+          player_avatar?: string | null
+          player_name: string
+          room_code: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          child_id?: string
+          created_at?: string
+          id?: string
+          player_avatar?: string | null
+          player_name?: string
+          room_code?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      multiplayer_game_scores: {
+        Row: {
+          child_id: string | null
+          created_at: string
+          id: string
+          is_ai: boolean
+          player_avatar: string | null
+          player_name: string
+          room_id: string
+          score: number
+          total_questions: number
+          updated_at: string
+        }
+        Insert: {
+          child_id?: string | null
+          created_at?: string
+          id?: string
+          is_ai?: boolean
+          player_avatar?: string | null
+          player_name: string
+          room_id: string
+          score?: number
+          total_questions?: number
+          updated_at?: string
+        }
+        Update: {
+          child_id?: string | null
+          created_at?: string
+          id?: string
+          is_ai?: boolean
+          player_avatar?: string | null
+          player_name?: string
+          room_id?: string
+          score?: number
+          total_questions?: number
+          updated_at?: string
+        }
+        Relationships: []
       }
       multiplayer_game_sessions: {
         Row: {

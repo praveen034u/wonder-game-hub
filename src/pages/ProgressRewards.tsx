@@ -6,6 +6,7 @@ import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/contexts/AuthContext";
 import { useProgress } from "@/contexts/ProgressContext";
 import { format, subDays, startOfDay, isSameDay } from "date-fns";
+import { AppHeader } from "@/components/Navigation/AppHeader";
 
 const ProgressRewards = () => {
   const navigate = useNavigate();
