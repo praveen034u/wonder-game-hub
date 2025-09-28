@@ -370,6 +370,7 @@ serve(async (req) => {
           .from('join_requests')
           .insert({
             room_code,
+            room_id: targetRoom.id,
             child_id,
             player_name: requesterProfile?.name || 'Player',
             player_avatar: requesterProfile?.avatar || '👤',
