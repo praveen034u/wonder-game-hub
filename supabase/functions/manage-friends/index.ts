@@ -140,6 +140,21 @@ serve(async (req) => {
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
 
+      case 'list_all_children':
+        // List all children across all parents (service role bypasses RLS)
+        const { data: allChildren, error: listError } = await supabase
+          .from('children_profiles')
+          .select('id, name, avatar, updated_at')
+          .neq('id', child_id)
+          .order('updated_at', { ascending: false });
+
+        if (listError) throw listError;
+
+        return new Response(
+          JSON.stringify({ success: true, data: allChildren || [] }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+
       default:
         throw new Error('Invalid action');
     }

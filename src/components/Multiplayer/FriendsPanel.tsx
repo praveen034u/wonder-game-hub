@@ -126,29 +126,28 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
     try {
       setIsLoadingOnlineUsers(true);
       
-      // Get all children except current child
-      const { data: allChildren, error } = await supabase
-        .from('children_profiles')
-        .select('id, name, avatar, updated_at')
-        .neq('id', selectedChild.id) // Exclude current child
-        .order('updated_at', { ascending: false });
+      const { data } = await supabase.functions.invoke('manage-friends', {
+        body: {
+          action: 'list_all_children',
+          child_id: selectedChild.id
+        }
+      });
 
-      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'Failed to load');
 
       const now = new Date();
       const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
       const thirtyMinutesAgo = new Date(now.getTime() - 30 * 60 * 1000);
 
-      const onlineUsersList: OnlineUser[] = (allChildren || []).map(child => {
+      const onlineUsersList: OnlineUser[] = (data.data || []).map((child: any) => {
         const lastSeen = new Date(child.updated_at);
         let status: 'online' | 'in-game' | 'offline' = 'offline';
-        
         if (lastSeen > fiveMinutesAgo) {
           status = 'online';
         } else if (lastSeen > thirtyMinutesAgo) {
-          status = 'online'; // Still consider as online if within 30 minutes
+          status = 'online';
         }
-        
+
         return {
           id: child.id,
           name: child.name,
@@ -163,7 +162,7 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
       console.error('Error loading online users:', error);
       toast({
         title: "Error",
-        description: "Failed to load online users",
+        description: "Failed to load users",
         variant: "destructive",
       });
     } finally {
