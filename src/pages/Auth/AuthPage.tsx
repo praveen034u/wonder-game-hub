@@ -49,8 +49,8 @@ export const AuthPage = () => {
                 <span className="font-medium text-gray-700">AI-powered story generation</span>
               </div>
               <div className="flex items-center space-x-3 p-3 rounded-xl bg-gradient-to-r from-blue-50 to-cyan-50 border border-blue-200">
-                <div className="text-2xl">👥</div>
-                <span className="font-medium text-gray-700">Multiple child profiles</span>
+                <div className="text-2xl">👫</div>
+                <span className="font-medium text-gray-700">Play with friends together</span>
               </div>
               <div className="flex items-center space-x-3 p-3 rounded-xl bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200">
                 <div className="text-2xl">🎤</div>
