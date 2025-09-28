@@ -478,6 +478,9 @@ class SupabaseTestSuite:
                                 else:
                                     results['errors'].append(f"Handle join request failed: {data.get('error')}")
                                     print(f"❌ Handle join request failed: {data.get('error')}")
+                            else:
+                                results['errors'].append(f"Handle join request HTTP error: {response.status_code}")
+                                print(f"❌ Handle join request HTTP error: {response.status_code}")
 
         except Exception as e:
             results['errors'].append(f"Game rooms management test exception: {str(e)}")
