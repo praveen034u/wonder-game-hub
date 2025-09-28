@@ -178,6 +178,21 @@ serve(async (req) => {
       );
     }
 
+    if (action === 'update_in_room_status') {
+      // Update child's in_room status
+      const { data, error } = await supabaseClient
+        .from('children_profiles')
+        .update({ in_room: profile_data.in_room })
+        .eq('id', child_id);
+
+      if (error) throw error;
+
+      return new Response(
+        JSON.stringify({ success: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     return new Response(JSON.stringify({ error: 'Invalid action' }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

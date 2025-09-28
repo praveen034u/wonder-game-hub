@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { LogOut, X } from "lucide-react";
 
 interface Player {
   id: string;
@@ -30,9 +31,12 @@ interface GameRoomPanelProps {
   players?: Player[];
   gameMode?: 'single' | 'multiplayer';
   onJoinRequestUpdate?: (requestCount: number) => void;
+  onLeaveRoom?: () => void;
+  selectedChildId?: string;
+  isHost?: boolean;
 }
 
-const GameRoomPanel = ({ roomCode, gameId, onPlayerJoin, players: externalPlayers, gameMode = 'single', onJoinRequestUpdate }: GameRoomPanelProps) => {
+const GameRoomPanel = ({ roomCode, gameId, onPlayerJoin, players: externalPlayers, gameMode = 'single', onJoinRequestUpdate, onLeaveRoom, selectedChildId, isHost }: GameRoomPanelProps) => {
   const { toast } = useToast();
   const [players, setPlayers] = useState<Player[]>([]);
   const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
@@ -195,6 +199,79 @@ const GameRoomPanel = ({ roomCode, gameId, onPlayerJoin, players: externalPlayer
     }
   };
 
+  const handleLeaveRoom = async () => {
+    if (!roomCode || !selectedChildId) return;
+    
+    try {
+      const { data: room } = await supabase
+        .from('game_rooms')
+        .select('id')
+        .eq('room_code', roomCode)
+        .single();
+      
+      if (room) {
+        const { data } = await supabase.functions.invoke('manage-game-rooms', {
+          body: {
+            action: 'leave_room',
+            room_id: room.id,
+            child_id: selectedChildId
+          }
+        });
+        
+        if (data?.success) {
+          toast({
+            title: "Left Room",
+            description: "You have left the game room",
+          });
+          onLeaveRoom?.();
+        }
+      }
+    } catch (error) {
+      console.error('Error leaving room:', error);
+      toast({
+        title: "Error",
+        description: "Failed to leave room",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleCloseRoom = async () => {
+    if (!roomCode || !selectedChildId || !isHost) return;
+    
+    try {
+      const { data: room } = await supabase
+        .from('game_rooms')
+        .select('id')
+        .eq('room_code', roomCode)
+        .single();
+      
+      if (room) {
+        const { data } = await supabase.functions.invoke('manage-game-rooms', {
+          body: {
+            action: 'close_room',
+            room_id: room.id
+          }
+        });
+        
+        if (data?.success) {
+          toast({
+            title: "Room Closed",
+            description: "The game room has been closed",
+          });
+          onLeaveRoom?.();
+        }
+      }
+    } catch (error) {
+      console.error('Error closing room:', error);
+      toast({
+        title: "Error",
+        description: "Failed to close room",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <>
       {/* Collapsible Room Panel */}
@@ -220,13 +297,38 @@ const GameRoomPanel = ({ roomCode, gameId, onPlayerJoin, players: externalPlayer
                   <CardTitle className="text-sm font-medium">
                     {gameMode === 'multiplayer' && roomCode ? `Room: ${roomCode}` : 'Players'}
                   </CardTitle>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setIsExpanded(false)}
-                  >
-                    ✕
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    {gameMode === 'multiplayer' && roomCode && (
+                      <>
+                        {isHost ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={handleCloseRoom}
+                            title="Close Room"
+                          >
+                            <X className="w-3 h-3" />
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={handleLeaveRoom}
+                            title="Leave Room"
+                          >
+                            <LogOut className="w-3 h-3" />
+                          </Button>
+                        )}
+                      </>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsExpanded(false)}
+                    >
+                      ✕
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent className="pt-0">

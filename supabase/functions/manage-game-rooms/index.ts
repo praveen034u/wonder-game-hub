@@ -421,6 +421,30 @@ serve(async (req) => {
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
 
+      case 'close_room':
+        // When host closes the room, set all participants' in_room status to false
+        const { data: allRoomParticipants } = await supabase
+          .from('room_participants')
+          .select('child_id')
+          .eq('room_id', room_id);
+        
+        if (allRoomParticipants && allRoomParticipants.length > 0) {
+          const participantIds = allRoomParticipants.map(p => p.child_id).filter(Boolean);
+          if (participantIds.length > 0) {
+            await supabase
+              .from('children_profiles')
+              .update({ in_room: false })
+              .in('id', participantIds);
+          }
+        }
+        
+        // Delete the room
+        await supabase.from('game_rooms').delete().eq('id', room_id);
+        
+        return new Response(JSON.stringify({ success: true }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+
       default:
         throw new Error('Invalid action');
     }
