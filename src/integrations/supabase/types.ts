@@ -215,7 +215,6 @@ export type Database = {
           player_avatar: string | null
           player_name: string
           room_code: string
-          room_id: string | null
           status: string
           updated_at: string
         }
@@ -226,7 +225,6 @@ export type Database = {
           player_avatar?: string | null
           player_name: string
           room_code: string
-          room_id?: string | null
           status?: string
           updated_at?: string
         }
@@ -237,19 +235,10 @@ export type Database = {
           player_avatar?: string | null
           player_name?: string
           room_code?: string
-          room_id?: string | null
           status?: string
           updated_at?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "join_requests_room_id_fkey"
-            columns: ["room_id"]
-            isOneToOne: false
-            referencedRelation: "game_rooms"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       multiplayer_game_scores: {
         Row: {
