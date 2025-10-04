@@ -3,14 +3,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAppContext } from "@/contexts/Auth0Context";
 import { useProgress } from "@/contexts/ProgressContext";
 import { format, subDays, startOfDay, isSameDay } from "date-fns";
 import { AppHeader } from "@/components/Navigation/AppHeader";
 
 const ProgressRewards = () => {
   const navigate = useNavigate();
-  const { activeProfile } = useAuth();
+  const { selectedChild } = useAppContext();
   const { progress } = useProgress();
 
   // Generate calendar for current month (simplified)
@@ -79,7 +79,7 @@ const ProgressRewards = () => {
       <div className="max-w-6xl mx-auto">
         <div className="text-center mb-8">
           <h1 className="text-4xl font-fredoka font-bold text-primary mb-2">
-            ⭐ {activeProfile?.name}'s Progress
+            ⭐ {selectedChild?.name}'s Progress
           </h1>
           <p className="text-lg text-muted-foreground">Look at all your amazing achievements!</p>
         </div>
