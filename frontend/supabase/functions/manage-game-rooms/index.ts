@@ -290,52 +290,61 @@ serve(async (req) => {
         );
 
       case 'invite_friends':
-        // Get host info for the invitations
-        const { data: inviteHostProfile } = await supabase
-          .from('children_profiles')
-          .select('name, avatar')
-          .eq('id', child_id)
-          .single();
-
+        // Get room info first to get the room_id
         const { data: roomInfo } = await supabase
           .from('game_rooms')
-          .select('room_code, game_id, difficulty')
+          .select('id, room_code, game_id, difficulty')
           .eq('id', room_id)
           .single();
 
-        if (!inviteHostProfile || !roomInfo) {
+        if (!roomInfo) {
           return new Response(
-            JSON.stringify({ success: false, error: 'Host or room not found' }),
+            JSON.stringify({ success: false, error: 'Room not found' }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
 
-        // Alternative invitation system: Store room code in invited friends' profiles
-        const invitations = [];
-        
-        // For now, implement a simple notification system
-        // TODO: Once schema cache is fixed, revert to proper join_requests system
-        console.log(`Attempting to invite ${friend_ids.length} friends to room ${roomInfo.room_code}`);
-        
-        // Create temporary invitations - in a real system, we would:
-        // 1. Add records to join_requests table
-        // 2. Send real-time notifications
-        // 3. Allow friends to see pending invitations
-        
-        for (const friendId of friend_ids) {
-          // Simulate successful invitation
-          invitations.push({
-            id: `temp_${Date.now()}_${friendId}`,
-            child_id: friendId,
-            room_code: roomInfo.room_code,
-            status: 'pending'
-          });
-          
-          console.log(`Simulated invitation sent to friend: ${friendId}`);
+        // Get friend profiles for their names and avatars
+        const { data: friendProfiles } = await supabase
+          .from('children_profiles')
+          .select('id, name, avatar')
+          .in('id', friend_ids);
+
+        if (!friendProfiles || friendProfiles.length === 0) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'No valid friends found' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
         }
 
+        // Create join requests for each friend with proper room_id
+        const invitationsToCreate = friendProfiles.map(friend => ({
+          room_id: roomInfo.id,
+          room_code: roomInfo.room_code,
+          child_id: friend.id,
+          player_name: friend.name || 'Player',
+          player_avatar: friend.avatar || '👤',
+          status: 'pending'
+        }));
+
+        const { data: createdInvitations, error: inviteError } = await supabase
+          .from('join_requests')
+          .insert(invitationsToCreate)
+          .select();
+
+        if (inviteError) {
+          console.error('Error creating invitations:', inviteError);
+          throw inviteError;
+        }
+
+        console.log(`Successfully created ${createdInvitations?.length || 0} invitations for room ${roomInfo.room_code}`);
+
         return new Response(
-          JSON.stringify({ success: true, invitations_sent: invitations.length }),
+          JSON.stringify({ 
+            success: true, 
+            invitations_sent: createdInvitations?.length || 0,
+            data: createdInvitations
+          }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
 
@@ -500,25 +509,46 @@ serve(async (req) => {
         });
 
       case 'get_pending_invitations':
-        // Alternative approach: Check game_rooms directly for any rooms that might have invited this child
-        // This bypasses the problematic join_requests table entirely
         try {
           console.log(`Getting pending invitations for child: ${child_id}`);
           
-          // For now, return empty array until we can implement a proper workaround
-          // The core issue is the Supabase schema cache - this function will work once resolved
-          const pendingInvitations = [];
-          
-          // TODO: Implement alternative invitation tracking system
-          console.log('Returning empty invitations array due to schema cache issue');
+          // Query join_requests with room information using the room_id foreign key
+          const { data: pendingInvitations, error: invitationsError } = await supabase
+            .from('join_requests')
+            .select(`
+              id,
+              room_id,
+              room_code,
+              player_name,
+              player_avatar,
+              status,
+              created_at,
+              game_rooms (
+                id,
+                room_code,
+                game_id,
+                difficulty,
+                host_child_id,
+                max_players,
+                current_players,
+                status
+              )
+            `)
+            .eq('child_id', child_id)
+            .eq('status', 'pending')
+            .order('created_at', { ascending: false });
 
-        const invitationsError = null; // No error since we handled it manually
+          if (invitationsError) {
+            console.error('Error fetching invitations:', invitationsError);
+            throw invitationsError;
+          }
+
+          console.log(`Found ${pendingInvitations?.length || 0} pending invitations for child ${child_id}`);
 
           return new Response(
             JSON.stringify({ 
               success: true, 
-              data: pendingInvitations,
-              message: 'Temporary workaround - invitations system needs schema cache fix'
+              data: pendingInvitations || []
             }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
@@ -526,31 +556,102 @@ serve(async (req) => {
           console.error('Error in get_pending_invitations:', inviteError);
           return new Response(
             JSON.stringify({ 
-              success: true, 
-              data: [],
-              message: `Schema cache issue prevented invitation query: ${(inviteError as Error).message}`
+              success: false,
+              error: `Failed to fetch invitations: ${(inviteError as Error).message}`,
+              data: []
             }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
 
       case 'accept_invitation':
-        // Temporary implementation - invitation system disabled due to schema cache issues
+        // Get the invitation
+        const { data: invitation, error: invitationError } = await supabase
+          .from('join_requests')
+          .select('*, game_rooms (*)')
+          .eq('id', invitation_id)
+          .eq('child_id', child_id)
+          .single();
+
+        if (invitationError || !invitation) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'Invitation not found' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Update invitation status
+        await supabase
+          .from('join_requests')
+          .update({ status: 'approved' })
+          .eq('id', invitation_id);
+
+        // Join the room using the existing join_room logic
+        const roomToJoin = invitation.game_rooms;
+        
+        if (!roomToJoin || roomToJoin.current_players >= roomToJoin.max_players) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'Room is full or unavailable' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Get player info
+        const { data: acceptingPlayerProfile } = await supabase
+          .from('children_profiles')
+          .select('name, avatar')
+          .eq('id', child_id)
+          .single();
+
+        // Add player to room
+        await supabase
+          .from('room_participants')
+          .insert({
+            room_id: roomToJoin.id,
+            child_id: child_id,
+            player_name: acceptingPlayerProfile?.name || 'Player',
+            player_avatar: acceptingPlayerProfile?.avatar || '👤',
+            is_ai: false
+          });
+
+        // Set player as in room
+        await supabase
+          .from('children_profiles')
+          .update({ room_id: roomToJoin.id } as any)
+          .eq('id', child_id);
+
+        // Update room player count
+        await supabase
+          .from('game_rooms')
+          .update({ current_players: roomToJoin.current_players + 1 })
+          .eq('id', roomToJoin.id);
+
         return new Response(
           JSON.stringify({ 
-            success: false, 
-            error: 'Invitation system temporarily unavailable due to infrastructure issues. Please use room codes to join games manually.' 
+            success: true, 
+            room: roomToJoin,
+            room_id: roomToJoin.id
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
 
       case 'decline_invitation':
-        // Temporary implementation - invitation system disabled due to schema cache issues
+        // Update invitation status to denied
+        const { error: declineError } = await supabase
+          .from('join_requests')
+          .update({ status: 'denied' })
+          .eq('id', invitation_id)
+          .eq('child_id', child_id);
+
+        if (declineError) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'Failed to decline invitation' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
         return new Response(
-          JSON.stringify({ 
-            success: false, 
-            error: 'Invitation system temporarily unavailable due to infrastructure issues.' 
-          }),
+          JSON.stringify({ success: true }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
 
