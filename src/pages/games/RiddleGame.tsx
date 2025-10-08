@@ -555,6 +555,9 @@ const RiddleGame = () => {
         players={players}
         gameMode={roomCode ? 'multiplayer' : 'single'}
         onJoinRequestUpdate={handleJoinRequestUpdate}
+        selectedChildId={selectedChild?.id}
+        isHost={isRoomCreator}
+        onLeaveRoom={() => navigate('/games')}
       />
       
       <div className="max-w-md mx-auto">
