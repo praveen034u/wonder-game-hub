@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,6 +8,8 @@ import gamesConfig from "@/config/games.config.json";
 import GameRoomModal from "@/components/Multiplayer/GameRoomModal";
 import FriendsPanel from "@/components/Multiplayer/FriendsPanel";
 import { AppHeader } from "@/components/Navigation/AppHeader";
+import JoinRequestButton from "@/components/Multiplayer/JoinRequestButton";
+import { supabase } from "@/integrations/supabase/client";
 
 const GameDashboard = () => {
   const navigate = useNavigate();
@@ -17,7 +19,49 @@ const GameDashboard = () => {
   const [selectedGame, setSelectedGame] = useState<{ id: string; difficulty: string } | null>(null);
   const [isFriendsPanelExpanded, setIsFriendsPanelExpanded] = useState(true);
   const [pendingInvites, setPendingInvites] = useState<string[] | null>(null);
-  
+  const [inviteCount, setInviteCount] = useState(0);
+
+  useEffect(() => {
+    // Subscribe to real-time join request updates
+    if (!selectedChild?.id) return;
+
+    const channel = supabase
+      .channel('dashboard-invites')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'join_requests',
+          filter: `child_id=eq.${selectedChild.id}`
+        },
+        () => {
+          // Update invite count when new invite arrives
+          loadInviteCount();
+        }
+      )
+      .subscribe();
+
+    loadInviteCount();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [selectedChild?.id]);
+
+  const loadInviteCount = async () => {
+    if (!selectedChild?.id) return;
+    
+    const { count, error } = await supabase
+      .from('join_requests')
+      .select('*', { count: 'exact', head: true })
+      .eq('child_id', selectedChild.id)
+      .eq('status', 'pending');
+
+    if (!error && count !== null) {
+      setInviteCount(count);
+    }
+  };
 
   const enabledGames = gamesConfig.filter(game => game.enabled);
 
@@ -65,7 +109,7 @@ const GameDashboard = () => {
             </div>
 
 
-            <div className="mb-6 text-center">
+            <div className="mb-6 text-center flex gap-3 justify-center">
               <Button
                 variant="outline"
                 onClick={() => navigate('/stories')}
@@ -73,6 +117,7 @@ const GameDashboard = () => {
               >
                 📚 Switch to Stories
               </Button>
+              <JoinRequestButton className="bg-white/80 hover:bg-white text-primary border-2 border-primary/30" />
             </div>
 
             <div className="flex justify-center">
