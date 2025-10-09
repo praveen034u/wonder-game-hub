@@ -19,6 +19,12 @@ interface Player {
   name: string;
   avatar: string;
   isAI: boolean;
+  // pending invite flag (not yet a room participant)
+  pending?: boolean;
+  // invitation id if created via join_requests
+  invite_id?: string;
+  // child id for invited player (when pending)
+  child_id?: string;
 }
 
 interface Friend {
@@ -287,7 +293,6 @@ const RoomManagementModal = ({ isOpen, onClose }: RoomManagementModalProps) => {
 
     try {
       setIsCreating(true);
-      
       const { data } = await supabase.functions.invoke('manage-game-rooms', {
         body: {
           action: 'create_room',
@@ -295,17 +300,74 @@ const RoomManagementModal = ({ isOpen, onClose }: RoomManagementModalProps) => {
           game_id: 'riddle', // Default game
           difficulty: 'easy', // Default difficulty
           room_name: customRoomName,
-          invited_friends: selectedFriendIds
+          // use the backend-expected field name
+          friend_ids: selectedFriendIds
         }
       });
 
       if (data?.success) {
+        const room = data.data;
         toast({
           title: "Room Created!",
-          description: `Room code: ${data.room_code}`,
+          description: `Room code: ${room?.room_code || ''}`,
         });
-        setRoomCode(data.room_code);
-        loadCurrentRoom();
+        setRoomCode(room?.room_code || '');
+        setCurrentRoom(room || null);
+        setActiveTab("room");
+        // load participants for UI
+        if (room?.id) loadRoomParticipants(room.id);
+
+        // After creating the room, explicitly call invite_friends so join_requests are created
+        if (selectedFriendIds.length > 0 && room?.id) {
+          try {
+            const inviteResp = await supabase.functions.invoke('manage-game-rooms', {
+              body: {
+                action: 'invite_friends',
+                room_id: room.id,
+                child_id: selectedChild.id,
+                friend_ids: selectedFriendIds
+              }
+            });
+
+            const inviteData = inviteResp.data;
+
+            if (inviteData?.success) {
+              toast({ title: 'Invites Sent', description: `Invited ${selectedFriendIds.length} friend(s)` });
+              // refresh pending invitations for the current child (if viewing join tab)
+              loadPendingInvitations();
+
+              // If the function returned created invitations, show them in the players panel as pending
+              const createdInvitations = inviteData.data || [];
+              if (createdInvitations.length > 0) {
+                const pendingPlayers: Player[] = createdInvitations.map((inv: any) => ({
+                  id: inv.child_id || inv.id || `invite-${inv.id}`,
+                  child_id: inv.child_id,
+                  invite_id: inv.id,
+                  name: inv.player_name || 'Invited',
+                  avatar: inv.player_avatar || '👤',
+                  isAI: false,
+                  pending: true
+                }));
+
+                // Merge pending invites into current players list while avoiding duplicates
+                setPlayers(prev => {
+                  const existingIds = new Set(prev.map(p => p.id));
+                  const merged = [...prev];
+                  for (const p of pendingPlayers) {
+                    if (!existingIds.has(p.id)) merged.push(p);
+                  }
+                  return merged;
+                });
+              }
+            } else {
+              toast({ title: 'Invites Failed', description: inviteData?.error || 'Failed to send invites', variant: 'destructive' });
+              console.error('invite_friends response error:', inviteData);
+            }
+          } catch (err) {
+            console.error('Error sending invites after room creation:', err);
+            toast({ title: 'Invites Failed', description: 'Failed to send invites', variant: 'destructive' });
+          }
+        }
       } else {
         toast({
           title: "Error",
@@ -717,14 +779,15 @@ const RoomManagementModal = ({ isOpen, onClose }: RoomManagementModalProps) => {
                       <h4 className="font-medium mb-3">Players ({players.length}/4)</h4>
                       <div className="space-y-2">
                         {players.map((player) => (
-                          <div key={player.id} className="flex items-center gap-3 p-2 bg-secondary/20 rounded-lg">
+                          <div key={player.id} className={`flex items-center gap-3 p-2 rounded-lg ${player.pending ? 'bg-yellow-50' : 'bg-secondary/20'}`}>
                             <Avatar className="w-8 h-8">
                               <AvatarImage src={player.avatar} />
                               <AvatarFallback>{player.name?.[0] || '?'}</AvatarFallback>
                             </Avatar>
                             <span className="flex-1 font-medium">{player.name}</span>
                             {player.isAI && <Badge variant="secondary">AI</Badge>}
-                            {player.id === selectedChild?.id && <Badge variant="default">You</Badge>}
+                            {!player.pending && player.id === selectedChild?.id && <Badge variant="default">You</Badge>}
+                            {player.pending && <Badge variant="outline">Invited</Badge>}
                           </div>
                         ))}
                       </div>
