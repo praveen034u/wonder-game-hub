@@ -622,7 +622,6 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
               </div>
             </ScrollArea>
           </TabsContent>
-          </TabsContent>
 
           <TabsContent value="search" className="space-y-4">
             <div className="flex gap-2">
