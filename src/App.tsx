@@ -7,6 +7,7 @@ import { ProgressProvider } from "@/contexts/ProgressContext";
 import { Auth0ProviderWrapper } from "@/contexts/Auth0Context";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { AuthPage } from "./pages/Auth/AuthPage";
+import Landing from "./pages/Landing";
 import Index from "./pages/Index";
 import Profile from "./pages/Profile";
 import ParentSetup from "./pages/ParentSetup";
@@ -31,6 +32,9 @@ const App = () => (
           <Sonner />
           <BrowserRouter>
             <Routes>
+             {/* Public Landing */}
+             <Route path="/welcome" element={<Landing />} />
+             
              {/* Auth routes */}
              <Route path="/auth" element={<AuthPage />} />
              

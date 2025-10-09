@@ -11,7 +11,7 @@ const Index = () => {
     if (isLoading || isLoadingProfiles) return;
 
     if (!isAuthenticated) {
-      navigate('/auth', { replace: true });
+      navigate('/welcome', { replace: true });
       return;
     }
 

@@ -44,6 +44,14 @@ interface OnlineUser {
   last_seen?: string;
 }
 
+interface RoomInvitation {
+  id: string;
+  room_code: string;
+  player_name: string;
+  player_avatar: string;
+  created_at: string;
+}
+
 interface FriendsPanelProps {
   onInviteFriend: (friendIds: string[]) => void;
 }
@@ -53,14 +61,17 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
   const { toast } = useToast();
   const [friends, setFriends] = useState<Friend[]>([]);
   const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([]);
+  const [roomInvites, setRoomInvites] = useState<RoomInvitation[]>([]);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
+
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [isLoadingOnlineUsers, setIsLoadingOnlineUsers] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+
 
   useEffect(() => {
     if (selectedChild) {
@@ -94,6 +105,32 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
       };
     }
   }, [selectedChild]);
+
+  // Realtime and list for room invitations
+  useEffect(() => {
+    if (!selectedChild?.id) return;
+    const load = async () => { await loadRoomInvites(); };
+    load();
+
+    const channel = supabase
+      .channel('friends-panel-invites')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'join_requests', filter: `child_id=eq.${selectedChild.id}` },
+        () => {
+          loadRoomInvites();
+          toast({ title: '🎮 New Game Invitation', description: 'You have a new room invite' });
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'join_requests', filter: `child_id=eq.${selectedChild.id}` },
+        () => { loadRoomInvites(); }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [selectedChild?.id]);
 
   const loadFriends = async () => {
     if (!selectedChild?.id) return;
@@ -226,6 +263,41 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
       }
     } catch (error) {
       console.error('Error loading friend requests:', error);
+    }
+  };
+
+  const loadRoomInvites = async () => {
+    if (!selectedChild?.id) return;
+    try {
+      const { data } = await supabase
+        .from('join_requests')
+        .select('*')
+        .eq('child_id', selectedChild.id)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false });
+      setRoomInvites((data || []) as RoomInvitation[]);
+    } catch (e) {
+      console.error('Error loading room invites:', e);
+    }
+  };
+
+  const handleInvitation = async (requestId: string, approve: boolean) => {
+    try {
+      const { data } = await supabase.functions.invoke('manage-game-rooms', {
+        body: { action: 'handle_join_request', request_id: requestId, approve },
+      });
+      if (data?.success) {
+        if (approve && data?.room) {
+          const room = data.room;
+          window.location.href = `/games/${room.game_id}?difficulty=${room.difficulty}&room=${room.room_code}`;
+        }
+        await loadRoomInvites();
+      } else {
+        toast({ title: 'Error', description: data?.error || 'Failed to handle invite', variant: 'destructive' });
+      }
+    } catch (err) {
+      console.error('Error handling invite:', err);
+      toast({ title: 'Error', description: 'Failed to handle invite', variant: 'destructive' });
     }
   };
 
@@ -378,8 +450,8 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
         <CardTitle className="flex items-center gap-2">
           👥 Friends
           <Badge variant="secondary">{friends.length}</Badge>
-          {friendRequests.length > 0 && (
-            <Badge variant="destructive">{friendRequests.length}</Badge>
+          {(friendRequests.length + roomInvites.length) > 0 && (
+            <Badge variant="destructive">{friendRequests.length + roomInvites.length}</Badge>
           )}
         </CardTitle>
       </CardHeader>
@@ -393,9 +465,9 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
             <TabsTrigger value="requests" className="flex items-center gap-2">
               <UserPlus className="h-4 w-4" />
               Requests
-              {friendRequests.length > 0 && (
+              {(friendRequests.length + roomInvites.length) > 0 && (
                 <Badge variant="destructive" className="ml-1 text-xs">
-                  {friendRequests.length}
+                  {friendRequests.length + roomInvites.length}
                 </Badge>
               )}
             </TabsTrigger>
@@ -468,56 +540,88 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
 
           <TabsContent value="requests" className="space-y-4">
             <div className="flex gap-2">
-              <Button size="sm" variant="outline" onClick={loadFriendRequests}>
+              <Button size="sm" variant="outline" onClick={() => { loadFriendRequests(); loadRoomInvites(); }}>
                 🔄 Refresh
               </Button>
             </div>
             <ScrollArea className="h-60">
-              <div className="space-y-2">
-                {friendRequests.map((request) => (
-                  <div
-                    key={request.id}
-                    className="flex items-center justify-between p-3 bg-secondary/20 rounded-lg"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Avatar className="w-8 h-8">
-                        <AvatarImage src={request.requester.avatar} />
-                        <AvatarFallback>{request.requester.name[0]}</AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <p className="font-medium text-sm">{request.requester.name}</p>
-                        <p className="text-xs text-muted-foreground">Wants to be friends</p>
+              <div className="space-y-3">
+                {/* Room Invitations */}
+                <div>
+                  <div className="text-xs text-muted-foreground mb-2">Room Invitations ({roomInvites.length})</div>
+                  {roomInvites.length === 0 ? (
+                    <div className="text-center py-6 text-muted-foreground">
+                      <p className="text-xs">No room invitations</p>
+                    </div>
+                  ) : (
+                    roomInvites.map((invite) => (
+                      <div key={invite.id} className="flex items-center justify-between p-3 bg-secondary/20 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <Avatar className="w-8 h-8">
+                            <AvatarImage src={invite.player_avatar} />
+                            <AvatarFallback>{invite.player_name?.[0] || '?'}</AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <p className="font-medium text-sm">From {invite.player_name}</p>
+                            <p className="text-xs text-muted-foreground">Room: {invite.room_code}</p>
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button size="sm" onClick={() => handleInvitation(invite.id, true)}>Accept</Button>
+                          <Button size="sm" variant="outline" onClick={() => handleInvitation(invite.id, false)}>Decline</Button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* Friend Requests */}
+                <div>
+                  <div className="text-xs text-muted-foreground mb-2">Friend Requests ({friendRequests.length})</div>
+                  {friendRequests.map((request) => (
+                    <div
+                      key={request.id}
+                      className="flex items-center justify-between p-3 bg-secondary/20 rounded-lg"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Avatar className="w-8 h-8">
+                          <AvatarImage src={request.requester.avatar} />
+                          <AvatarFallback>{request.requester.name[0]}</AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="font-medium text-sm">{request.requester.name}</p>
+                          <p className="text-xs text-muted-foreground">Wants to be friends</p>
+                        </div>
+                      </div>
+                      
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => handleFriendRequest(request.id, 'accept')}
+                          disabled={isLoading}
+                        >
+                          Accept
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleFriendRequest(request.id, 'decline')}
+                          disabled={isLoading}
+                        >
+                          Decline
+                        </Button>
                       </div>
                     </div>
-                    
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        onClick={() => handleFriendRequest(request.id, 'accept')}
-                        disabled={isLoading}
-                      >
-                        Accept
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleFriendRequest(request.id, 'decline')}
-                        disabled={isLoading}
-                      >
-                        Decline
-                      </Button>
+                  ))}
+                  {friendRequests.length === 0 && (
+                    <div className="text-center py-6 text-muted-foreground">
+                      <p className="text-xs">No friend requests</p>
                     </div>
-                  </div>
-                ))}
-                
-                {friendRequests.length === 0 && (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <p className="text-sm">No friend requests</p>
-                    <p className="text-xs">Friend requests will appear here</p>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             </ScrollArea>
+          </TabsContent>
           </TabsContent>
 
           <TabsContent value="search" className="space-y-4">

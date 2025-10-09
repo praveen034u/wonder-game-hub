@@ -58,7 +58,49 @@ const JoinRequestButton = ({ className }: JoinRequestButtonProps) => {
 
   // Load pending requests on mount and when child changes
   useEffect(() => {
+    if (!selectedChild?.id) return;
+    
     fetchPendingRequests();
+
+    // Set up real-time subscription for new invitations
+    const channel = supabase
+      .channel('join-requests-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'join_requests',
+          filter: `child_id=eq.${selectedChild.id}`
+        },
+        (payload) => {
+          console.log('New invitation received:', payload);
+          fetchPendingRequests();
+          
+          // Show notification toast
+          toast({
+            title: "🎮 New Game Invitation!",
+            description: `You've been invited to join a game room`,
+          });
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'join_requests',
+          filter: `child_id=eq.${selectedChild.id}`
+        },
+        () => {
+          fetchPendingRequests();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [selectedChild?.id]);
 
   const handleRefresh = async () => {
