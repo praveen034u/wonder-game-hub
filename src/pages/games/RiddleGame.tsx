@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -57,7 +57,8 @@ const RiddleGame = () => {
   const [gamePhase, setGamePhase] = useState<GamePhase>('countdown');
   const [selectedCategory] = useState<string>('Zoo Animals');
   const [players, setPlayers] = useState<Player[]>([]);
-  const [currentRiddleIndex, setCurrentRiddleIndex] = useState(0);
+const [currentRiddleIndex, setCurrentRiddleIndex] = useState(0);
+const countdownTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (roomCode) {
@@ -167,23 +168,38 @@ const RiddleGame = () => {
   };
 
   const startCountdown = () => {
+    // Clear any existing timer
+    if (countdownTimerRef.current) {
+      window.clearInterval(countdownTimerRef.current);
+      countdownTimerRef.current = null;
+    }
     let count = 3;
     setCountdown(count);
-    const timer = setInterval(() => {
-      count--;
+    const id = window.setInterval(() => {
+      count -= 1;
       setCountdown(count);
-      if (count === 0) {
-        clearInterval(timer);
+      if (count <= 0) {
+        window.clearInterval(id);
+        countdownTimerRef.current = null;
         setGamePhase('playing');
       }
     }, 1000);
+    countdownTimerRef.current = id;
   };
-  const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
-  const [showFeedback, setShowFeedback] = useState(false);
-  const [countdown, setCountdown] = useState(3);
-  const [isRoomCreator, setIsRoomCreator] = useState(false);
-  const [pendingJoinRequests, setPendingJoinRequests] = useState(0);
-  const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
+const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
+const [showFeedback, setShowFeedback] = useState(false);
+const [countdown, setCountdown] = useState(3);
+
+// Failsafe: ensure transition to playing when countdown completes
+useEffect(() => {
+  if (gamePhase === 'countdown' && countdown <= 0) {
+    setGamePhase('playing');
+  }
+}, [countdown, gamePhase]);
+
+const [isRoomCreator, setIsRoomCreator] = useState(false);
+const [pendingJoinRequests, setPendingJoinRequests] = useState(0);
+const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
 
   // Get riddles for selected category and difficulty
   const getCategoryRiddles = (category: string) => {
