@@ -75,6 +75,7 @@ const GameRoomModal = ({ isOpen, onClose, gameId, difficulty, onStartGame, invit
       return; // initialize will run when selectedChild updates
     }
     if (selectedChild) {
+      checkExistingRoom();
       initializeRoom();
       loadFriendsAndUsers();
     }
@@ -92,6 +93,44 @@ const GameRoomModal = ({ isOpen, onClose, gameId, difficulty, onStartGame, invit
       refreshProfiles();
     }
   }, [isOpen, childrenProfiles.length, refreshProfiles]);
+
+  const checkExistingRoom = async () => {
+    if (!selectedChild?.id) return;
+
+    try {
+      const { data } = await supabase.functions.invoke('manage-game-rooms', {
+        body: {
+          action: 'get_current_room',
+          child_id: selectedChild.id
+        }
+      });
+
+      if (data?.success && data.data) {
+        const existingRoom = data.data;
+        setCurrentRoom(existingRoom);
+        setRoomCode(existingRoom.room_code);
+        
+        // Load participants
+        const participantPlayers = existingRoom.participants.map((p: any) => ({
+          id: p.child_id || p.id,
+          name: p.player_name,
+          avatar: p.player_avatar,
+          isAI: p.is_ai
+        }));
+        setPlayers(participantPlayers);
+        
+        // Switch to room tab automatically
+        setActiveTab("room");
+        
+        toast({
+          title: "Active Room Found",
+          description: `You're in room ${existingRoom.room_code}`,
+        });
+      }
+    } catch (error) {
+      console.error('Error checking existing room:', error);
+    }
+  };
 
   const initializeRoom = () => {
     if (!selectedChild) return;
@@ -347,6 +386,9 @@ const GameRoomModal = ({ isOpen, onClose, gameId, difficulty, onStartGame, invit
       setPlayers([]);
       setActiveTab("create");
       
+      // Refresh to remove room tracking
+      await checkExistingRoom();
+      
       toast({
         title: "Left Room",
         description: "You have left the game room",
@@ -596,7 +638,7 @@ const GameRoomModal = ({ isOpen, onClose, gameId, difficulty, onStartGame, invit
                       className="flex-1"
                       disabled={players.length < 1}
                     >
-                      Start Game ({players.length} players)
+                      {currentRoom.status === 'playing' ? 'Rejoin Game' : 'Start Game'} ({players.length} players)
                     </Button>
                     <Button 
                       variant="outline" 

@@ -484,6 +484,58 @@ serve(async (req) => {
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
 
+      case 'get_current_room':
+        // Get child's current room_id
+        const { data: childProfile } = await supabase
+          .from('children_profiles')
+          .select('room_id')
+          .eq('id', child_id)
+          .single();
+
+        if (!childProfile?.room_id) {
+          return new Response(
+            JSON.stringify({ success: true, data: null }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Get room details
+        const { data: currentRoomData, error: roomFetchError } = await supabase
+          .from('game_rooms')
+          .select('*')
+          .eq('id', childProfile.room_id)
+          .single();
+
+        if (roomFetchError || !currentRoomData) {
+          // Room no longer exists, clear the room_id
+          await supabase
+            .from('children_profiles')
+            .update({ room_id: null } as any)
+            .eq('id', child_id);
+
+          return new Response(
+            JSON.stringify({ success: true, data: null }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Get participants
+        const { data: roomParticipants } = await supabase
+          .from('room_participants')
+          .select('*')
+          .eq('room_id', currentRoomData.id);
+
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            data: { 
+              ...currentRoomData, 
+              participants: roomParticipants || [] 
+            } 
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+
       case 'close_room':
         // When host closes the room, set all participants' room_id to null
         const { data: allRoomParticipants } = await supabase
