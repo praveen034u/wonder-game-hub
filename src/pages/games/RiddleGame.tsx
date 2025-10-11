@@ -59,6 +59,7 @@ const RiddleGame = () => {
   const [players, setPlayers] = useState<Player[]>([]);
 const [currentRiddleIndex, setCurrentRiddleIndex] = useState(0);
 const countdownTimerRef = useRef<number | null>(null);
+const fallbackTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (roomCode) {
@@ -119,13 +120,22 @@ const countdownTimerRef = useRef<number | null>(null);
           }));
           
           setPlayers(playerList);
-          
-          // Initialize scores in database
-          await initializeGameScores(roomData.id, playerList);
+
+          // Start countdown immediately (don't block on DB writes)
+          startCountdown();
+
+          // Initialize scores in database in background
+          initializeGameScores(roomData.id, playerList).catch((e) => {
+            console.error('Error initializing game scores:', e);
+          });
+        } else {
+          // No participants found, still start the game
+          startCountdown();
         }
+      } else {
+        // If room not found, still proceed to start
+        startCountdown();
       }
-      
-      startCountdown();
     } catch (error) {
       console.error('Error loading room data:', error);
       // Fallback to single player
@@ -196,6 +206,31 @@ useEffect(() => {
     setGamePhase('playing');
   }
 }, [countdown, gamePhase]);
+
+// Hard fallback: force transition after 4.5s even if interval fails
+useEffect(() => {
+  if (gamePhase === 'countdown') {
+    if (fallbackTimeoutRef.current) {
+      window.clearTimeout(fallbackTimeoutRef.current);
+    }
+    fallbackTimeoutRef.current = window.setTimeout(() => {
+      setGamePhase('playing');
+    }, 4500);
+  }
+  return () => {
+    if (fallbackTimeoutRef.current) {
+      window.clearTimeout(fallbackTimeoutRef.current);
+    }
+  };
+}, [gamePhase]);
+
+// Cleanup timers on unmount
+useEffect(() => {
+  return () => {
+    if (countdownTimerRef.current) window.clearInterval(countdownTimerRef.current);
+    if (fallbackTimeoutRef.current) window.clearTimeout(fallbackTimeoutRef.current);
+  };
+}, []);
 
 const [isRoomCreator, setIsRoomCreator] = useState(false);
 const [pendingJoinRequests, setPendingJoinRequests] = useState(0);
