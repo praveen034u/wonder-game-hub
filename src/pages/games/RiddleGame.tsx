@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { useAppContext } from "@/contexts/Auth0Context";
 import { useProgress } from "@/contexts/ProgressContext";
 import { useToast } from "@/hooks/use-toast";
@@ -22,7 +23,7 @@ type Player = {
   isAI?: boolean;
 };
 
-type GamePhase = 'setup' | 'countdown' | 'playing' | 'scoreboard' | 'complete';
+type GamePhase = 'theme-select' | 'setup' | 'countdown' | 'playing' | 'scoreboard' | 'complete';
 
 const RiddleGame = () => {
   const navigate = useNavigate();
@@ -34,6 +35,7 @@ const RiddleGame = () => {
 
   const difficulty = searchParams.get('difficulty') || 'easy';
   const roomCode = searchParams.get('room');
+  const GAME_DURATION = 300; // 5 minutes in seconds
 
   // Only show riddle game if gameId matches
   if (gameId !== 'riddle') {
@@ -54,14 +56,20 @@ const RiddleGame = () => {
     );
   }
   
-  const [gamePhase, setGamePhase] = useState<GamePhase>('countdown');
-  const [selectedCategory] = useState<string>('Zoo Animals');
+  const [gamePhase, setGamePhase] = useState<GamePhase>('theme-select');
+  const [selectedCategory, setSelectedCategory] = useState<string>('Zoo Animals');
   const [players, setPlayers] = useState<Player[]>([]);
-const [currentRiddleIndex, setCurrentRiddleIndex] = useState(0);
-const countdownTimerRef = useRef<number | null>(null);
-const fallbackTimeoutRef = useRef<number | null>(null);
+  const [currentRiddleIndex, setCurrentRiddleIndex] = useState(0);
+  const [gameTimer, setGameTimer] = useState(GAME_DURATION);
+  const [showNewPlayerDialog, setShowNewPlayerDialog] = useState(false);
+  const [newPlayerInfo, setNewPlayerInfo] = useState<Player | null>(null);
+  const countdownTimerRef = useRef<number | null>(null);
+  const fallbackTimeoutRef = useRef<number | null>(null);
+  const gameTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
+    if (gamePhase === 'theme-select') return; // Don't load until theme is selected
+    
     if (roomCode) {
       // Load room participants for multiplayer
       loadRoomData();
@@ -87,7 +95,7 @@ const fallbackTimeoutRef = useRef<number | null>(null);
       setPlayers(newPlayers);
       startCountdown();
     }
-  }, [roomCode]);
+  }, [roomCode, gamePhase]);
 
   const loadRoomData = async () => {
     if (!roomCode || !selectedChild) return;
@@ -192,9 +200,30 @@ const fallbackTimeoutRef = useRef<number | null>(null);
         window.clearInterval(id);
         countdownTimerRef.current = null;
         setGamePhase('playing');
+        startGameTimer();
       }
     }, 1000);
     countdownTimerRef.current = id;
+  };
+
+  const startGameTimer = () => {
+    // Clear any existing game timer
+    if (gameTimerRef.current) {
+      window.clearInterval(gameTimerRef.current);
+    }
+    setGameTimer(GAME_DURATION);
+    const id = window.setInterval(() => {
+      setGameTimer(prev => {
+        if (prev <= 1) {
+          window.clearInterval(id);
+          gameTimerRef.current = null;
+          finishGame();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    gameTimerRef.current = id;
   };
 const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
 const [showFeedback, setShowFeedback] = useState(false);
@@ -229,6 +258,7 @@ useEffect(() => {
   return () => {
     if (countdownTimerRef.current) window.clearInterval(countdownTimerRef.current);
     if (fallbackTimeoutRef.current) window.clearTimeout(fallbackTimeoutRef.current);
+    if (gameTimerRef.current) window.clearInterval(gameTimerRef.current);
   };
 }, []);
 
@@ -300,19 +330,37 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
 
   const handlePlayerJoin = (newPlayer: any) => {
     // Add new player if not already in the list
-    setPlayers(prev => {
-      const exists = prev.find(p => p.id === newPlayer.id);
-      if (!exists) {
-        return [...prev, {
-          id: newPlayer.id,
-          name: newPlayer.name,
-          avatar: newPlayer.avatar,
-          score: 0,
-          isAI: newPlayer.isAI
-        }];
+    const exists = players.find(p => p.id === newPlayer.id);
+    if (!exists && gamePhase === 'playing') {
+      // Show dialog asking if game should restart
+      setNewPlayerInfo({
+        id: newPlayer.id,
+        name: newPlayer.name,
+        avatar: newPlayer.avatar,
+        score: 0,
+        isAI: newPlayer.isAI
+      });
+      setShowNewPlayerDialog(true);
+    } else if (!exists) {
+      setPlayers(prev => [...prev, {
+        id: newPlayer.id,
+        name: newPlayer.name,
+        avatar: newPlayer.avatar,
+        score: 0,
+        isAI: newPlayer.isAI
+      }]);
+    }
+  };
+
+  const handleNewPlayerResponse = (restart: boolean) => {
+    if (newPlayerInfo) {
+      setPlayers(prev => [...prev, newPlayerInfo]);
+      if (restart) {
+        handlePlayAgain();
       }
-      return prev;
-    });
+    }
+    setShowNewPlayerDialog(false);
+    setNewPlayerInfo(null);
   };
 
   const handleAnswerSelect = async (answer: string) => {
@@ -463,6 +511,51 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
     setPendingJoinRequests(requestCount);
   };
 
+  const handleThemeSelect = (theme: string) => {
+    setSelectedCategory(theme);
+    setGamePhase('countdown');
+  };
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Theme Selection Phase
+  if (gamePhase === 'theme-select') {
+    const availableThemes = Object.keys(riddlesData);
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-primary/20 to-secondary/20">
+        <AppHeader title="Select Theme" showBackButton />
+        <div className="container mx-auto px-4 py-6">
+          <Card className="max-w-2xl mx-auto">
+            <CardHeader>
+              <CardTitle className="text-center text-2xl font-fredoka text-primary">
+                Choose Your Riddle Theme
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {availableThemes.map((theme) => (
+                  <Button
+                    key={theme}
+                    onClick={() => handleThemeSelect(theme)}
+                    className="h-24 text-lg font-medium"
+                    variant="outline"
+                  >
+                    {theme === 'Zoo Animals' && '🦁 '}
+                    {theme === 'Ocean Friends' && '🐋 '}
+                    {theme}
+                  </Button>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   // Countdown Phase
   if (gamePhase === 'countdown') {
@@ -598,6 +691,47 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
         </div>
       )}
 
+      {/* Game Timer */}
+      <div className="fixed top-4 left-4 z-50">
+        <Card className="bg-white/95 shadow-lg">
+          <CardContent className="py-2 px-4">
+            <div className="flex items-center space-x-2">
+              <span className="text-xl">⏱️</span>
+              <span className={`text-lg font-bold ${gameTimer < 60 ? 'text-red-500' : 'text-primary'}`}>
+                {formatTime(gameTimer)}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* New Player Join Dialog */}
+      {showNewPlayerDialog && newPlayerInfo && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <Card className="max-w-md mx-4">
+            <CardHeader>
+              <CardTitle>New Player Joined!</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-muted-foreground">
+                <strong>{newPlayerInfo.name}</strong> wants to join the game.
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Would you like to restart the game or continue playing?
+              </p>
+              <div className="flex gap-2">
+                <Button onClick={() => handleNewPlayerResponse(true)} className="flex-1">
+                  Restart Game
+                </Button>
+                <Button onClick={() => handleNewPlayerResponse(false)} variant="outline" className="flex-1">
+                  Continue Playing
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {/* Player Panel - Always visible */}
       <GameRoomPanel 
         roomCode={roomCode} 
@@ -633,6 +767,10 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
           
           <CardContent className="space-y-4">
             <div className="text-center bg-secondary/10 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <Badge variant="secondary">{selectedCategory}</Badge>
+                <Badge variant="outline">{difficulty}</Badge>
+              </div>
               <h3 className="text-lg font-medium text-primary mb-3">
                 {currentRiddle.question}
               </h3>

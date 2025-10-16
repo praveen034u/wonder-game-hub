@@ -136,12 +136,14 @@ const GameRoomPanel = ({ roomCode, gameId, onPlayerJoin, players: externalPlayer
 
         setPlayers(finalPlayers);
 
-        // Get pending join requests
+        // Get pending join requests - filter out those who are already participants
+        const participantChildIds = participants?.map(p => p.child_id).filter(Boolean) || [];
         const { data: requests } = await supabase
           .from('join_requests' as any)
           .select('*')
           .eq('room_code', roomCode)
-          .eq('status', 'pending');
+          .eq('status', 'pending')
+          .not('child_id', 'in', `(${participantChildIds.join(',')})`);
 
         if (requests) {
           setJoinRequests(requests as unknown as JoinRequest[]);
