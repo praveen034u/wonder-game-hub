@@ -474,25 +474,16 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
   };
 
   const handlePlayAgain = () => {
-    setGamePhase('countdown');
     setCurrentRiddleIndex(0);
     setSelectedAnswer(null);
     setShowFeedback(false);
-    setCountdown(3);
     
     // Reset scores but keep players
     setPlayers(prev => prev.map(p => ({ ...p, score: 0 })));
     
-    // Start countdown for new game
-    let count = 3;
-    const timer = setInterval(() => {
-      count--;
-      setCountdown(count);
-      if (count === 0) {
-        clearInterval(timer);
-        setGamePhase('playing');
-      }
-    }, 1000);
+    // Go directly to playing phase, restart game timer
+    setGamePhase('playing');
+    startGameTimer();
   };
 
   const handleJoinRequestUpdate = (requestCount: number) => {
