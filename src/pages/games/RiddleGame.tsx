@@ -437,19 +437,7 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
       setCurrentRiddleIndex(prev => prev + 1);
       setSelectedAnswer(null);
       setShowFeedback(false);
-      setCountdown(3);
-      setGamePhase('countdown');
-      
-      // Countdown for next question
-      let count = 3;
-      const timer = setInterval(() => {
-        count--;
-        setCountdown(count);
-        if (count === 0) {
-          clearInterval(timer);
-          setGamePhase('playing');
-        }
-      }, 1000);
+      // Stay in playing phase, no countdown between questions
     } else {
       finishGame();
     }
