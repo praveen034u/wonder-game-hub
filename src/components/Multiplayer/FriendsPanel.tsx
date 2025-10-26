@@ -10,7 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useAppContext } from "@/contexts/Auth0Context";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Search, Users, UserPlus } from "lucide-react";
+import { Search, Users, UserPlus, UserMinus } from "lucide-react";
 
 interface Friend {
   id: string;
@@ -414,6 +414,43 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
     }
   };
 
+  const handleUnfriend = async (friendshipId: string, friendName: string) => {
+    if (!selectedChild?.id) return;
+
+    try {
+      setIsLoading(true);
+      const { data } = await supabase.functions.invoke('manage-friends', {
+        body: {
+          action: 'unfriend',
+          friendship_id: friendshipId
+        }
+      });
+
+      if (data?.success) {
+        toast({
+          title: "Friend Removed",
+          description: `${friendName} has been removed from your friends list`,
+        });
+        await loadFriends();
+      } else {
+        toast({
+          title: "Error",
+          description: data?.error || "Failed to remove friend",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Error removing friend:', error);
+      toast({
+        title: "Error",
+        description: "Failed to remove friend",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const toggleUserSelection = (userId: string) => {
     setSelectedUsers(prev => 
       prev.includes(userId) 
@@ -525,6 +562,16 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
                         <p className="text-xs text-muted-foreground capitalize">{friend.status}</p>
                       </div>
                     </div>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                      onClick={() => handleUnfriend(friend.id, friend.name)}
+                      disabled={isLoading}
+                      title="Remove friend"
+                    >
+                      <UserMinus className="h-4 w-4" />
+                    </Button>
                   </div>
                 ))}
                 

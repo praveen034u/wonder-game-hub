@@ -26,7 +26,7 @@ serve(async (req) => {
     // Set the auth token for RLS
     supabase.auth.setSession({ access_token: authToken, refresh_token: '' });
 
-    const { action, child_id, friend_child_id, friend_request_id, search_query, friend_ids } = await req.json();
+    const { action, child_id, friend_child_id, friend_request_id, search_query, friend_ids, friendship_id } = await req.json();
 
     console.log('Received request:', { action, child_id, friend_child_id });
 
@@ -219,6 +219,20 @@ serve(async (req) => {
 
         return new Response(
           JSON.stringify({ success: true, data: childrenWithStatus }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+
+      case 'unfriend':
+        // Remove friendship
+        const { error: unfriendError } = await supabase
+          .from('friends')
+          .delete()
+          .eq('id', friendship_id);
+
+        if (unfriendError) throw unfriendError;
+
+        return new Response(
+          JSON.stringify({ success: true }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
 
