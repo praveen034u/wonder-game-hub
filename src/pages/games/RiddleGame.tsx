@@ -711,18 +711,17 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
         </div>
       )}
 
-      {/* Player Panel - Always visible */}
-      <GameRoomPanel 
-        roomCode={roomCode} 
-        gameId={gameId || 'riddle'}
-        onPlayerJoin={handlePlayerJoin}
-        players={players}
-        gameMode={roomCode ? 'multiplayer' : 'single'}
-        onJoinRequestUpdate={handleJoinRequestUpdate}
-        selectedChildId={selectedChild?.id}
-        isHost={isRoomCreator}
-        onLeaveRoom={() => navigate('/games')}
-      />
+  {gamePhase !== 'playing' && (
+  <GameRoomPanel 
+    roomCode={roomCode} 
+    gameId={gameId || 'riddle'}
+    onPlayerJoin={handlePlayerJoin}
+    players={players}
+    gameMode={roomCode ? 'multiplayer' : 'single'}
+    onJoinRequestUpdate={handleJoinRequestUpdate}
+  />
+)}
+
       
       <div className="max-w-md mx-auto">
         <Card className="bg-white/90 shadow-xl">
