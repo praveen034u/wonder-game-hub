@@ -108,7 +108,7 @@ serve(async (req) => {
 
         // Transform to get the friend's data (not current child's data)
         const friends = friendsList?.map(f => {
-          const friendData = f.requester_id === child_id ? f.addressee?.[0] : f.requester?.[0];
+          const friendData = f.requester_id === child_id ? f.addressee : f.requester;
           return {
             id: f.id,
             child_id: friendData?.id,
