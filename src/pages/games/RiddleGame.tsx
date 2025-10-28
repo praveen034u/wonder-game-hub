@@ -3,7 +3,6 @@ import { useNavigate, useSearchParams, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { useAppContext } from "@/contexts/Auth0Context";
@@ -79,6 +78,9 @@ const RiddleGame = () => {
   }, [players]);
 
 
+  // We intentionally call loadRoomData() here and don't want exhaustive-deps to force
+  // adding every helper function to the deps array. Disable the rule for this effect.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (gamePhase === 'theme-select') return; // Don't load until theme is selected
     
@@ -702,6 +704,8 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
   }
 
   // Playing Phase  
+  // compute once whether scores should be visible
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/20 via-secondary/20 to-accent/20 p-4">
       {/* Join Request Notification Banner */}
@@ -729,6 +733,31 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
               <span className={`text-lg font-bold ${gameTimer < 60 ? 'text-red-500' : 'text-primary'}`}>
                 {formatTime(gameTimer)}
               </span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Scoreboard Panel (visible during play: names/avatars shown, scores hidden) */}
+      <div className="fixed top-20 right-4 z-50 w-72">
+        <Card className="bg-white/95 shadow-lg">
+          <CardHeader className="py-2 px-3">
+            <CardTitle className="text-sm">Players</CardTitle>
+          </CardHeader>
+          <CardContent className="py-2 px-3">
+            <div className="space-y-2 max-h-64 overflow-auto">
+              {[...players].sort((a, b) => b.score - a.score).map((player, idx) => (
+                <div key={player.id} className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <Avatar className="w-6 h-6">
+                      <AvatarFallback className="text-sm">{player.avatar}</AvatarFallback>
+                    </Avatar>
+                    <span className="text-sm truncate">{idx === 0 ? `👑 ${player.name}` : player.name}</span>
+                  </div>
+                  {/* show real scores only when gamePhase is 'complete' (end screen uses a different layout anyway) */}
+                 
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>
@@ -772,8 +801,8 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
   />
 )}
 
-      
       <div className="max-w-md mx-auto">
+        
         <Card className="bg-white/90 shadow-xl">
           <CardHeader className="text-center">
             <CardTitle className="text-xl font-fredoka text-primary">
