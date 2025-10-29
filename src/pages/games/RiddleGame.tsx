@@ -656,7 +656,7 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
                 ))}
               </div>
             </div>
-            
+                              
             <div className="space-y-3">
               <Button 
                 onClick={handlePlayAgain}
