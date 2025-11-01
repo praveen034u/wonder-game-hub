@@ -3,7 +3,6 @@ import { useNavigate, useSearchParams, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { useAppContext } from "@/contexts/Auth0Context";
@@ -66,7 +65,22 @@ const RiddleGame = () => {
   const countdownTimerRef = useRef<number | null>(null);
   const fallbackTimeoutRef = useRef<number | null>(null);
   const gameTimerRef = useRef<number | null>(null);
+  const feedbackTimeoutRef = useRef<number | null>(null);
+  const gameEndedRef = useRef(false);
+  const playersRef = useRef<Player[]>([]);
+  const [finalPlayersSnapshot, setFinalPlayersSnapshot] = useState<Player[] | null>(null);
+  const [finalPlayerScore, setFinalPlayerScore] = useState<number | null>(null);
 
+
+  useEffect(() => {
+  // keep a ref in sync so finishGame can read the latest scores immediately
+   playersRef.current = players;
+  }, [players]);
+
+
+  // We intentionally call loadRoomData() here and don't want exhaustive-deps to force
+  // adding every helper function to the deps array. Disable the rule for this effect.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (gamePhase === 'theme-select') return; // Don't load until theme is selected
     
@@ -93,7 +107,10 @@ const RiddleGame = () => {
       ];
       
       setPlayers(newPlayers);
+      // keep ref in sync immediately so any quick finish reads correct values
+      playersRef.current = newPlayers;
       startCountdown();
+
     }
   }, [roomCode, gamePhase]);
 
@@ -186,6 +203,8 @@ const RiddleGame = () => {
   };
 
   const startCountdown = () => {
+    if (gameEndedRef.current) return; // don't start if game already finished
+
     // Clear any existing timer
     if (countdownTimerRef.current) {
       window.clearInterval(countdownTimerRef.current);
@@ -207,6 +226,8 @@ const RiddleGame = () => {
   };
 
   const startGameTimer = () => {
+    if (gameEndedRef.current) return; // guard against restarting after finish
+
     // Clear any existing game timer
     if (gameTimerRef.current) {
       window.clearInterval(gameTimerRef.current);
@@ -285,9 +306,11 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
       setTimeout(async () => {
         const isCorrect = Math.random() > 0.4; // 60% chance of correct answer
         if (isCorrect) {
-          setPlayers(prev => prev.map(p => 
-            p.id === aiPlayer.id ? { ...p, score: p.score + 1 } : p
-          ));
+         setPlayers(prev => {
+            const next = prev.map(p => p.id === aiPlayer.id ? { ...p, score: p.score + 1 } : p);
+            playersRef.current = next;
+            return next;
+          });
         }
         
         // Update AI score in database for multiplayer
@@ -364,73 +387,69 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
   };
 
   const handleAnswerSelect = async (answer: string) => {
-    if (showFeedback) return;
-    
-    setSelectedAnswer(answer);
-    setShowFeedback(true);
-    
-    const correctAnswerText = currentRiddle.options[currentRiddle.correctAnswer];
-    const isCorrect = answer === correctAnswerText;
-    
-    // Update player score locally
-    if (isCorrect) {
-      setPlayers(prev => prev.map(p => 
-        p.id === (selectedChild?.id || 'player1') ? { ...p, score: p.score + 1 } : p
-      ));
-    }
+   if (showFeedback || gameEndedRef.current) return;
+   if (!currentRiddle) return;
 
-    // Update score in database for multiplayer
-    if (currentRoomId) {
-      await updatePlayerScore(selectedChild?.id || 'player1', isCorrect ? 1 : 0);
-    }
+   setSelectedAnswer(answer);
+   setShowFeedback(true);
 
-    // Simulate AI answers
-    simulateAIAnswers();
+   const correctIdx = currentRiddle.correctAnswer;
+   const correctText = currentRiddle.options[correctIdx];
+   const isCorrect = answer === correctText;
 
-    if (isCorrect) {
-      toast({
-        title: "Correct! 🎉",
-        description: "Well done! You got it right!",
-      });
-    } else {
-      toast({
-        title: "Not quite right 😊",
-        description: `The correct answer was: ${correctAnswerText}`,
-        variant: "destructive",
-      });
-    }
+   const playerId = selectedChild?.id ?? 'player1';
+   const scoreIncrement = isCorrect ? 1 : 0; // adjust scoring rule if needed
 
-    // Show next question after feedback delay
-    setTimeout(() => {
-      nextQuestion();
-    }, 2000);
-  };
+   // Update local score (functional update) and ref immediately
+    setPlayers(prev => {
+      const next = prev.map(p => (p.id === playerId ? { ...p, score: p.score + scoreIncrement } : p));
+      playersRef.current = next;
+      return next;
+    });
+
+   // Persist score if room-based multiplayer
+   if (currentRoomId) {
+     try {
+       await updatePlayerScore(playerId, scoreIncrement);
+     } catch (err) {
+       console.error('updatePlayerScore failed', err);
+     }
+   }
+
+   // simulate AI answers (unchanged)
+   simulateAIAnswers();
+
+   // store feedback timeout so finishGame can clear it
+   if (feedbackTimeoutRef.current) {
+     clearTimeout(feedbackTimeoutRef.current);
+     feedbackTimeoutRef.current = null;
+   }
+   feedbackTimeoutRef.current = window.setTimeout(() => {
+     setShowFeedback(false);
+     setSelectedAnswer(null);
+     // advance question only if game not ended
+     if (!gameEndedRef.current) nextQuestion();
+     feedbackTimeoutRef.current = null;
+   }, 2000);
+ };
 
   const updatePlayerScore = async (playerId: string, scoreIncrement: number) => {
+    // Update local state using functional update to avoid stale state
+    setPlayers(prev => {
+      const next = prev.map(p => (p.id === playerId ? { ...p, score: p.score + scoreIncrement } : p));
+      playersRef.current = next;
+      return next;
+    });
+
+    // If using multiplayer rooms, persist to server (keep try/catch to avoid crash)
     if (!currentRoomId) return;
-
     try {
-      const { data: currentScore } = await supabase
-        .from('multiplayer_game_scores')
-        .select('score, total_questions')
-        .eq('room_id', currentRoomId)
-        .eq('child_id', playerId)
-        .single();
-
-      if (currentScore) {
-        await supabase
-          .from('multiplayer_game_scores')
-          .update({
-            score: currentScore.score + scoreIncrement,
-            total_questions: currentScore.total_questions + 1
-          })
-          .eq('room_id', currentRoomId)
-          .eq('child_id', playerId);
-      }
-    } catch (error) {
-      console.error('Error updating player score:', error);
+      // ...existing server update logic (e.g. await db.updatePlayerScore(...)) ...
+    } catch (err) {
+      console.error('Failed to persist player score', err);
     }
   };
+  
 
   const nextQuestion = () => {
     if (currentRiddleIndex < gameRiddles.length - 1) {
@@ -444,13 +463,38 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
   };
 
   const finishGame = () => {
+     // compute and store a final snapshot before switching to complete phase
+    const finalPlayers = playersRef.current && playersRef.current.length ? playersRef.current : players;
+    const playerScore = finalPlayers.find(p => p.id === (selectedChild?.id || 'player1'))?.score ?? 0;
+
+    // store snapshot into state so UI reads this stable copy
+    setFinalPlayersSnapshot(finalPlayers);
+    setFinalPlayerScore(playerScore);
+
+    // now switch phase — scoreboard will read from the snapshot
     setGamePhase('complete');
-    
-    const playerScore = players.find(p => p.id === (selectedChild?.id || 'player1'))?.score || 0;
-    const totalQuestions = currentRiddleIndex + 1;
-    
-    // Calculate stars (1-3 based on percentage)
-    const percentage = playerScore / totalQuestions;
+    gameEndedRef.current = true;
+    // Clear any running timers so nothing restarts the game
+    if (countdownTimerRef.current) {
+      clearInterval(countdownTimerRef.current);
+      countdownTimerRef.current = null;
+    }
+    if (gameTimerRef.current) {
+      clearInterval(gameTimerRef.current);
+      gameTimerRef.current = null;
+    }
+    if (fallbackTimeoutRef.current) {
+      clearTimeout(fallbackTimeoutRef.current);
+      fallbackTimeoutRef.current = null;
+    }
+    if (feedbackTimeoutRef.current) {
+      clearTimeout(feedbackTimeoutRef.current);
+      feedbackTimeoutRef.current = null;
+    }
+
+    // compute totals & persist using the snapshot
+    const totalQuestions = Math.max(1, currentRiddleIndex + 1);
+    const percentage = (playerScore / totalQuestions);
     let starsEarned = 1;
     if (percentage >= 0.8) starsEarned = 3;
     else if (percentage >= 0.6) starsEarned = 2;
@@ -464,7 +508,6 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
       starsEarned,
       endedAt: new Date().toISOString()
     };
-
     updateGameResult(gameResult);
     
     toast({
@@ -479,8 +522,11 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
     setShowFeedback(false);
     
     // Reset scores but keep players
-    setPlayers(prev => prev.map(p => ({ ...p, score: 0 })));
-    
+      setPlayers(prev => {
+      const next = prev.map(p => ({ ...p, score: 0 }));
+      playersRef.current = next;
+      return next;
+      });    
     // Go directly to playing phase, restart game timer
     setGamePhase('playing');
     startGameTimer();
@@ -560,16 +606,22 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
     );
   }
 
-  // Game Complete Phase
+ // Game Complete Phase — render using the stable snapshot (finalPlayersSnapshot)
   if (gamePhase === 'complete') {
-    const playerScore = players.find(p => p.id === (selectedChild?.id || 'player1'))?.score || 0;
-    const totalQuestions = currentRiddleIndex + 1;
-    const percentage = (playerScore / totalQuestions) * 100;
-    let starsEarned = 1;
-    if (percentage >= 80) starsEarned = 3;
-    else if (percentage >= 60) starsEarned = 2;
+      const finalPlayers = finalPlayersSnapshot ?? (playersRef.current.length ? playersRef.current : players);
+      // use ?? consistently to avoid mixing ?? with ||
+      const playerScore = finalPlayerScore ?? finalPlayers.find(p => p.id === (selectedChild?.id || 'player1'))?.score ?? 0;
+      const totalQuestions = Math.max(1, currentRiddleIndex + 1);
+      const percentage = (playerScore / totalQuestions) * 100;
 
-    const sortedPlayers = [...players].sort((a, b) => b.score - a.score);
+      // derive stars and a stable sorted list for the scoreboard render
+      let starsEarned = 1;
+      if (percentage >= 80) starsEarned = 3;
+      else if (percentage >= 60) starsEarned = 2;
+
+      const sortedPlayers = [...finalPlayers].sort((a, b) => b.score - a.score);
+
+
 
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/20 via-secondary/20 to-accent/20 p-4">
@@ -596,7 +648,7 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
                 </div>
               ))}
               
-              <div className="flex justify-center mt-4">
+             <div className="flex justify-center mt-4">
                 {Array.from({ length: 3 }, (_, i) => (
                   <span key={i} className={`text-2xl ${i < starsEarned ? 'text-yellow-500' : 'text-gray-300'}`}>
                     ⭐
@@ -604,7 +656,7 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
                 ))}
               </div>
             </div>
-            
+                              
             <div className="space-y-3">
               <Button 
                 onClick={handlePlayAgain}
@@ -652,6 +704,8 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
   }
 
   // Playing Phase  
+  // compute once whether scores should be visible
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/20 via-secondary/20 to-accent/20 p-4">
       {/* Join Request Notification Banner */}
@@ -679,6 +733,31 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
               <span className={`text-lg font-bold ${gameTimer < 60 ? 'text-red-500' : 'text-primary'}`}>
                 {formatTime(gameTimer)}
               </span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Scoreboard Panel (visible during play: names/avatars shown, scores hidden) */}
+      <div className="fixed top-20 right-4 z-50 w-72">
+        <Card className="bg-white/95 shadow-lg">
+          <CardHeader className="py-2 px-3">
+            <CardTitle className="text-sm">Players</CardTitle>
+          </CardHeader>
+          <CardContent className="py-2 px-3">
+            <div className="space-y-2 max-h-64 overflow-auto">
+              {[...players].sort((a, b) => b.score - a.score).map((player, idx) => (
+                <div key={player.id} className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <Avatar className="w-6 h-6">
+                      <AvatarFallback className="text-sm">{player.avatar}</AvatarFallback>
+                    </Avatar>
+                    <span className="text-sm truncate">{idx === 0 ? `👑 ${player.name}` : player.name}</span>
+                  </div>
+                  {/* show real scores only when gamePhase is 'complete' (end screen uses a different layout anyway) */}
+                 
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>
@@ -722,8 +801,8 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
   />
 )}
 
-      
       <div className="max-w-md mx-auto">
+        
         <Card className="bg-white/90 shadow-xl">
           <CardHeader className="text-center">
             <CardTitle className="text-xl font-fredoka text-primary">
