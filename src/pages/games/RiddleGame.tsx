@@ -31,65 +31,43 @@ const RiddleGame = () => {
   const { selectedChild } = useAppContext();
   const { updateGameResult } = useProgress();
   const { toast } = useToast();
-
+  // Local UI / game state
   const difficulty = searchParams.get('difficulty') || 'easy';
-  const roomCode = searchParams.get('room');
-  const GAME_DURATION = 300; // 5 minutes in seconds
+  const paramRoom = searchParams.get('room')?.toUpperCase() || null;
 
-  // Only show riddle game if gameId matches
-  if (gameId !== 'riddle') {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-primary/20 to-secondary/20">
-        <AppHeader title="Game Not Found" showBackButton />
-        <div className="container mx-auto px-4 py-6 flex items-center justify-center">
-          <Card className="max-w-md mx-auto">
-            <CardContent className="text-center py-8">
-              <p className="text-lg">Game "{gameId}" not found.</p>
-              <Button onClick={() => navigate('/games')} className="mt-4">
-                Back to Games
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    );
-  }
-  
-  const [gamePhase, setGamePhase] = useState<GamePhase>('theme-select');
-  const [selectedCategory, setSelectedCategory] = useState<string>('Zoo Animals');
+  const [roomCode, setRoomCode] = useState<string | null>(paramRoom);
   const [players, setPlayers] = useState<Player[]>([]);
+  const playersRef = useRef<Player[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>('Zoo Animals');
+  const [gamePhase, setGamePhase] = useState<GamePhase>('theme-select');
+  const [waitingForPlayers, setWaitingForPlayers] = useState(false);
   const [currentRiddleIndex, setCurrentRiddleIndex] = useState(0);
-  const [gameTimer, setGameTimer] = useState(GAME_DURATION);
+  const [gameTimer, setGameTimer] = useState(0);
+  const [finalPlayersSnapshot, setFinalPlayersSnapshot] = useState<Player[] | null>(null);
+  const [finalPlayerScore, setFinalPlayerScore] = useState<number | null>(null);
   const [showNewPlayerDialog, setShowNewPlayerDialog] = useState(false);
   const [newPlayerInfo, setNewPlayerInfo] = useState<Player | null>(null);
+
+  const gameEndedRef = useRef(false);
   const countdownTimerRef = useRef<number | null>(null);
   const fallbackTimeoutRef = useRef<number | null>(null);
   const gameTimerRef = useRef<number | null>(null);
   const feedbackTimeoutRef = useRef<number | null>(null);
-  const gameEndedRef = useRef(false);
-  const playersRef = useRef<Player[]>([]);
-  const [finalPlayersSnapshot, setFinalPlayersSnapshot] = useState<Player[] | null>(null);
-  const [finalPlayerScore, setFinalPlayerScore] = useState<number | null>(null);
 
+  const GAME_DURATION = 300; // 5 minutes
 
+  // Initialize room or single-player when params or selectedChild change
   useEffect(() => {
-  // keep a ref in sync so finishGame can read the latest scores immediately
-   playersRef.current = players;
-  }, [players]);
+    const param = searchParams.get('room')?.toUpperCase() || null;
+    setRoomCode(param);
 
-
-  // We intentionally call loadRoomData() here and don't want exhaustive-deps to force
-  // adding every helper function to the deps array. Disable the rule for this effect.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    if (gamePhase === 'theme-select') return; // Don't load until theme is selected
-    
-    if (roomCode) {
-      // Load room participants for multiplayer
+    if (param) {
+      // multiplayer mode: load participants from DB
       loadRoomData();
     } else {
-      // Single player mode
+      // single player default setup
       const playerName = selectedChild?.name || 'Player';
+      setSelectedCategory('Zoo Animals');
       const newPlayers: Player[] = [
         {
           id: selectedChild?.id || 'player1',
@@ -105,14 +83,12 @@ const RiddleGame = () => {
           isAI: true
         }
       ];
-      
       setPlayers(newPlayers);
-      // keep ref in sync immediately so any quick finish reads correct values
       playersRef.current = newPlayers;
       startCountdown();
-
     }
-  }, [roomCode, gamePhase]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, selectedChild]);
 
   const loadRoomData = async () => {
     if (!roomCode || !selectedChild) return;
@@ -146,8 +122,65 @@ const RiddleGame = () => {
           
           setPlayers(playerList);
 
-          // Start countdown immediately (don't block on DB writes)
-          startCountdown();
+          // Multiplayer: when another human joins, do NOT auto-start the game.
+          // Instead, present the theme-selection flow. Only start automatically if an AI is present and
+          // this client should proceed as single-player vs AI.
+          const hasAI = playerList.some(p => p.isAI);
+          if (hasAI && playerList.length === 1) {
+            // solo with AI: proceed to countdown
+            startCountdown();
+            initializeGameScores(roomData.id, playerList).catch((e) => {
+              console.error('Error initializing game scores:', e);
+            });
+          } else if (playerList.length >= 2) {
+            // Two or more humans: show theme selection / waiting state until host chooses a theme
+            setWaitingForPlayers(false);
+            // If room already has a selected category and is already playing, follow it
+            if ((roomData as any).selected_category) {
+              setSelectedCategory((roomData as any).selected_category);
+            }
+            if (roomData.status === 'playing' && (roomData as any).selected_category) {
+              // If the server already marked the room as playing, start immediately
+              initializeGameScores(roomData.id, playerList).catch((e) => console.error('Error initializing game scores:', e));
+              startCountdown();
+            } else {
+              // stay in theme-select so host can pick theme; guests will see waiting messages
+              setGamePhase('theme-select');
+            }
+
+            // Subscribe to participant changes to keep the player list in sync (but DO NOT auto-start)
+            const channel = supabase
+              .channel(`riddle-room-participants-${roomData.id}`)
+              .on('postgres_changes', { event: '*', schema: 'public', table: 'room_participants', filter: `room_id=eq.${roomData.id}` }, (payload) => {
+                const rec: any = payload.new || payload.old;
+                if (!rec) return;
+                const newPlayer: Player = {
+                  id: rec.child_id || rec.id,
+                  name: rec.player_name,
+                  avatar: rec.player_avatar || '👤',
+                  score: 0,
+                  isAI: rec.is_ai
+                };
+                setPlayers(prev => {
+                  const exists = prev.some(p => p.id === newPlayer.id);
+                  if (exists) return prev.map(p => p.id === newPlayer.id ? { ...p, ...newPlayer } : p);
+                  const next = [...prev, newPlayer];
+                  // when enough players arrive, clear waiting but do not auto-start
+                  if (next.some(p => p.isAI) || next.length >= 2) {
+                    setWaitingForPlayers(false);
+                  }
+                  return next;
+                });
+              })
+              .subscribe();
+
+            // cleanup subscription when leaving
+            const unsubscribe = () => supabase.removeChannel(channel);
+            (window as any).__riddle_room_cleanup = unsubscribe;
+          } else {
+            // Wait for additional players to join
+            setWaitingForPlayers(true);
+          }
 
           // Initialize scores in database in background
           initializeGameScores(roomData.id, playerList).catch((e) => {
@@ -298,6 +331,10 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
   
   const gameRiddles = getCategoryRiddles(selectedCategory);
   const currentRiddle = gameRiddles[currentRiddleIndex];
+
+  const humanPlayersCount = players.filter(p => !p.isAI).length;
+  const hostCanSelectTheme = !!roomCode ? (isRoomCreator && humanPlayersCount >= 2) : true;
+  const canSelectTheme = hostCanSelectTheme;
 
   const simulateAIAnswers = () => {
     // Simulate AI players answering with random delays
@@ -536,9 +573,93 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
     setPendingJoinRequests(requestCount);
   };
 
+  // Cleanup any temporary room subscriptions created by loadRoomData
+  useEffect(() => {
+    return () => {
+      const cleanup = (window as any).__riddle_room_cleanup;
+      if (typeof cleanup === 'function') {
+        try { cleanup(); } catch (e) { /* ignore */ }
+        delete (window as any).__riddle_room_cleanup;
+      }
+    };
+  }, []);
+
   const handleThemeSelect = (theme: string) => {
+    // If this is a multiplayer room, only the room creator may select the theme
+    if (roomCode && !isRoomCreator) {
+      toast({ title: 'Waiting for host', description: 'Only the room creator can select the theme', variant: 'default' });
+      return;
+    }
+
     setSelectedCategory(theme);
+
+    if (roomCode && isRoomCreator) {
+      // Persist selection to the room so other participants receive it via realtime
+      (async () => {
+        try {
+          // Persist only the selected category; don't mark as playing yet — host will start the game explicitly
+          await supabase
+            .from('game_rooms')
+            .update({ selected_category: theme } as any)
+            .eq('room_code', roomCode);
+        } catch (e) {
+          console.error('Failed to update room with selected theme', e);
+        }
+      })();
+    }
+    // remain in theme-select until host explicitly starts the game
+  };
+
+  // Subscribe to game_rooms updates so invited players learn when the host starts
+  useEffect(() => {
+    if (!roomCode) return;
+
+    const channel = supabase
+      .channel(`game-room-updates-${roomCode}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'game_rooms', filter: `room_code=eq.${roomCode}` }, (payload) => {
+        const rec: any = payload.new;
+        if (!rec) return;
+
+        // If host selected a category, apply it locally even if status isn't 'playing' yet
+        if (rec.selected_category) {
+          setSelectedCategory(rec.selected_category);
+          setWaitingForPlayers(false);
+        }
+
+        // Only transition to countdown when server sets status='playing'
+        if (rec.status === 'playing') {
+          setGamePhase('countdown');
+        }
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [roomCode]);
+
+  // Host explicit start handler: persist 'playing' status and kick off countdown
+  const startGameAsHost = async () => {
+    if (!roomCode || !currentRoomId) return;
+
+    try {
+      // Ensure initial scores exist for participants
+      await initializeGameScores(currentRoomId, playersRef.current);
+    } catch (e) {
+      console.error('Failed to initialize scores before starting', e);
+    }
+
+    try {
+      await supabase
+        .from('game_rooms')
+        .update({ status: 'playing' })
+        .eq('room_code', roomCode);
+    } catch (e) {
+      console.error('Failed to set room status to playing', e);
+    }
+
+    // Local optimistic transition while realtime notifies others
     setGamePhase('countdown');
+    setWaitingForPlayers(false);
+    startCountdown();
   };
 
   const formatTime = (seconds: number) => {
@@ -562,18 +683,54 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {availableThemes.map((theme) => (
-                  <Button
-                    key={theme}
-                    onClick={() => handleThemeSelect(theme)}
-                    className="h-24 text-lg font-medium"
-                    variant="outline"
-                  >
-                    {theme === 'Zoo Animals' && '🦁 '}
-                    {theme === 'Ocean Friends' && '🐋 '}
-                    {theme}
-                  </Button>
-                ))}
+                {availableThemes.map((theme) => {
+                  const isSelected = selectedCategory === theme;
+                  return (
+                    <Button
+                      key={theme}
+                      onClick={() => handleThemeSelect(theme)}
+                      className={`h-24 text-lg font-medium ${isSelected ? 'ring-2 ring-green-400 shadow-md' : ''}`}
+                      variant={isSelected ? 'default' : 'outline'}
+                      disabled={!canSelectTheme}
+                      title={!canSelectTheme ? (roomCode && !isRoomCreator ? 'Waiting for host to select theme' : 'Waiting for player to join') : undefined}
+                    >
+                      {theme === 'Zoo Animals' && '🦁 '}
+                      {theme === 'Ocean Friends' && '🐋 '}
+                      <span className="flex items-center justify-center">
+                        {theme}
+                        {isSelected && <Badge className="ml-3" variant="secondary">Selected</Badge>}
+                      </span>
+                    </Button>
+                  );
+                })}
+                {/* Host waiting hint: host can't select until another human joins */}
+                {roomCode && isRoomCreator && humanPlayersCount < 2 && (
+                  <div className="text-center text-sm text-muted-foreground mt-3">
+                    Waiting for the other player to join to select the theme…
+                  </div>
+                )}
+                {/* Invited player hint: waiting for host selection */}
+                {roomCode && !isRoomCreator && !selectedCategory && (
+                  <div className="text-center text-sm text-muted-foreground mt-3">
+                    Waiting for the host to select the theme and start the game…
+                  </div>
+                )}
+                {/* If a theme is already selected, show Start for host, waiting message for guests */}
+                {roomCode && selectedCategory && (
+                  <div className="w-full mt-3">
+                    {isRoomCreator ? (
+                      <div className="flex justify-center">
+                        <Button onClick={startGameAsHost} className="w-48">
+                          Start Game ▶
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="text-center text-sm text-muted-foreground mt-2">
+                        Waiting for the host to start the game…
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -718,6 +875,20 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
                 <span className="text-yellow-800 font-medium">
                   {pendingJoinRequests} player{pendingJoinRequests > 1 ? 's' : ''} want{pendingJoinRequests === 1 ? 's' : ''} to join!
                 </span>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Waiting for other player banner */}
+      {waitingForPlayers && (
+        <div className="fixed top-20 left-1/2 transform -translate-x-1/2 z-50">
+          <Card className="bg-blue-50 border-blue-200 shadow-lg">
+            <CardContent className="py-3 px-4">
+              <div className="flex items-center space-x-2">
+                <span className="text-blue-600 text-lg">⏳</span>
+                <span className="text-blue-800 font-medium">Waiting for the other player to join…</span>
               </div>
             </CardContent>
           </Card>
