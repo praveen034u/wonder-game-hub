@@ -165,6 +165,7 @@ const RiddleGame = () => {
                   const exists = prev.some(p => p.id === newPlayer.id);
                   if (exists) return prev.map(p => p.id === newPlayer.id ? { ...p, ...newPlayer } : p);
                   const next = [...prev, newPlayer];
+                  playersRef.current = next;
                   // when enough players arrive, clear waiting but do not auto-start
                   if (next.some(p => p.isAI) || next.length >= 2) {
                     setWaitingForPlayers(false);
@@ -178,8 +179,40 @@ const RiddleGame = () => {
             const unsubscribe = () => supabase.removeChannel(channel);
             (window as any).__riddle_room_cleanup = unsubscribe;
           } else {
-            // Wait for additional players to join
+            // Wait for additional players to join - set up subscription to detect when they arrive
             setWaitingForPlayers(true);
+            
+            // Subscribe to participant changes even while waiting
+            const channel = supabase
+              .channel(`riddle-room-participants-waiting-${roomData.id}`)
+              .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'room_participants', filter: `room_id=eq.${roomData.id}` }, (payload) => {
+                const rec: any = payload.new;
+                if (!rec) return;
+                const newPlayer: Player = {
+                  id: rec.child_id || rec.id,
+                  name: rec.player_name,
+                  avatar: rec.player_avatar || '👤',
+                  score: 0,
+                  isAI: rec.is_ai
+                };
+                setPlayers(prev => {
+                  const exists = prev.some(p => p.id === newPlayer.id);
+                  if (exists) return prev;
+                  const next = [...prev, newPlayer];
+                  playersRef.current = next;
+                  // when second player arrives, we can move forward
+                  if (next.length >= 2) {
+                    setWaitingForPlayers(false);
+                    setGamePhase('theme-select');
+                  }
+                  return next;
+                });
+              })
+              .subscribe();
+
+            // cleanup subscription
+            const unsubscribe = () => supabase.removeChannel(channel);
+            (window as any).__riddle_room_cleanup = unsubscribe;
           }
 
           // Initialize scores in database in background
@@ -478,10 +511,26 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
       return next;
     });
 
-    // If using multiplayer rooms, persist to server (keep try/catch to avoid crash)
+    // If using multiplayer rooms, persist to server
     if (!currentRoomId) return;
     try {
-      // ...existing server update logic (e.g. await db.updatePlayerScore(...)) ...
+      const { data: currentScore } = await supabase
+        .from('multiplayer_game_scores')
+        .select('score, total_questions')
+        .eq('room_id', currentRoomId)
+        .eq('child_id', playerId)
+        .single();
+
+      if (currentScore) {
+        await supabase
+          .from('multiplayer_game_scores')
+          .update({
+            score: currentScore.score + scoreIncrement,
+            total_questions: currentScore.total_questions + 1
+          })
+          .eq('room_id', currentRoomId)
+          .eq('child_id', playerId);
+      }
     } catch (err) {
       console.error('Failed to persist player score', err);
     }
