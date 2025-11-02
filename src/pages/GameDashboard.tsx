@@ -188,7 +188,7 @@ const GameDashboard = () => {
           </div>
 
           {/* Friends Panel - Collapsible Right Edge */}
-          <div className={`fixed right-0 top-0 h-full lg:w-80 bg-white/95 shadow-lg transition-transform duration-300 z-50 
+          <div className={`fixed right-0 top-0 h-full lg:w-120 bg-white/100 shadow-lg transition-transform duration-300 z-50 
             ${isFriendsPanelExpanded ? 'translate-x-0' : 'translate-x-full'}`}>
             <div className="relative h-full">
               {/* Toggle Button */}

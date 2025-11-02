@@ -70,7 +70,6 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
   const [isSearching, setIsSearching] = useState(false);
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [isLoadingOnlineUsers, setIsLoadingOnlineUsers] = useState(false);
-  const [showSearch, setShowSearch] = useState(false);
 
 
   useEffect(() => {
@@ -493,8 +492,8 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4 h-full">
-        <Tabs defaultValue="friends" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+        <Tabs defaultValue="friends" className="w-full ">
+          <TabsList className="grid w-full h-full grid-cols-3">
             <TabsTrigger value="friends" className="flex items-center gap-2">
               <Users className="h-4 w-4" />
               Friends
@@ -681,6 +680,13 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
               >
                 🔄 Refresh
               </Button>
+              {/* Persistent search bar: always visible in Search tab */}
+              <Input
+                placeholder="Search by name..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="flex-1"
+              />
             </div>
 
             {selectedUsers.length > 0 && (
@@ -697,17 +703,9 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
               </div>
             )}
 
-            {showSearch ? (
+            {/* If user typed a search query, show search results; otherwise show online users */}
+            {searchQuery.trim() ? (
               <>
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Search by name..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="flex-1"
-                  />
-                </div>
-
                 <ScrollArea className="h-60">
                   <div className="space-y-2">
                     {isSearching && (
@@ -740,17 +738,11 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
                         </Button>
                       </div>
                     ))}
-                    
-                    {!isSearching && searchQuery && searchResults.length === 0 && (
+
+                    {!isSearching && searchResults.length === 0 && (
                       <div className="text-center py-8 text-muted-foreground">
                         <p className="text-sm">No users found</p>
                         <p className="text-xs">Try a different search term</p>
-                      </div>
-                    )}
-                    
-                    {!searchQuery && (
-                      <div className="text-center py-8 text-muted-foreground">
-                        <p className="text-sm">Search for friends by name</p>
                       </div>
                     )}
                   </div>
@@ -758,7 +750,7 @@ const FriendsPanel = ({ onInviteFriend }: FriendsPanelProps) => {
               </>
             ) : (
               <ScrollArea className="h-60">
-                <div className="space-y-2">
+                <div className="space-y-1">
                   {isLoadingOnlineUsers && (
                     <div className="text-center py-4 text-muted-foreground">
                       <p className="text-sm">Loading online users...</p>

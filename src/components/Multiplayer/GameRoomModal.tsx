@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from 'react-router-dom';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -205,6 +206,77 @@ const GameRoomModal = ({ isOpen, onClose, gameId, difficulty, onStartGame, invit
     }
   };
 
+  // Decide whether the room can be started: require either an AI or at least 2 players
+  const humanPlayersCount = players.filter(p => !p.isAI).length;
+  const hasAI = players.some(p => p.isAI);
+  const canStart = hasAI || players.length >= 2;
+
+  // Keep currentRoom updated when selected_category or status changes server-side
+  useEffect(() => {
+    if (!roomCode) return;
+
+    const channel = supabase
+      .channel(`game-room-updates-${roomCode}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'game_rooms', filter: `room_code=eq.${roomCode}` }, (payload) => {
+        try {
+          const rec: any = payload.new;
+          if (!rec) return;
+          // merge into currentRoom to keep participants & metadata in sync
+          setCurrentRoom(prev => ({ ...(prev || {}), ...rec }));
+        } catch (e) {
+          console.error('Error handling game_rooms realtime payload', e);
+        }
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [roomCode]);
+
+  const navigate = useNavigate();
+
+  // If the host initiates theme selection we persist a placeholder selected_category so other
+  // participants (who have the modal open) can navigate to the theme page too. The host will
+  // then replace the placeholder with the real theme when they pick one.
+  const handleSelectThemeForAll = async (roomCode: string) => {
+    try {
+      // write an empty string as a sentinel to indicate theme-selection flow started
+      await supabase
+        .from('game_rooms')
+        .update({ selected_category: '' } as any)
+        .eq('room_code', roomCode);
+    } catch (e) {
+      console.error('Failed to mark room as selecting theme', e);
+    }
+
+    // navigate host to the theme page
+    onStartGame(roomCode);
+  };
+
+  // Navigate guests to the theme selection page when the host starts theme selection
+  useEffect(() => {
+    if (!roomCode) return;
+    const channel = supabase
+      .channel(`game-room-updates-${roomCode}-nav`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'game_rooms', filter: `room_code=eq.${roomCode}` }, (payload) => {
+        try {
+          const rec: any = payload.new;
+          if (!rec) return;
+          // If selected_category exists (even as empty sentinel), navigate non-hosts to theme page
+          if (rec.selected_category !== undefined && rec.selected_category !== null) {
+            // If modal is open and this client is not the host, navigate to game page so they see theme select
+            if (currentRoom?.host_child_id !== selectedChild?.id) {
+              navigate(`/games/${gameId}?difficulty=${difficulty}&room=${roomCode}`);
+            }
+          }
+        } catch (e) {
+          console.error('Error handling navigation realtime payload', e);
+        }
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [roomCode, currentRoom, selectedChild, navigate, gameId, difficulty]);
+
   const createGameRoom = async () => {
     console.log('Create room clicked, selectedChild:', selectedChild, 'childrenProfiles:', childrenProfiles);
     const activeChild = selectedChild || childrenProfiles[0];
@@ -288,6 +360,54 @@ const GameRoomModal = ({ isOpen, onClose, gameId, difficulty, onStartGame, invit
       setIsCreating(false);
     }
   };
+
+  // Subscribe to real-time room participant changes for the current room
+  useEffect(() => {
+    if (!currentRoom?.id) return;
+
+    const roomId = currentRoom.id;
+    const channel = supabase
+      .channel(`room-participants-${roomId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'room_participants', filter: `room_id=eq.${roomId}` }, (payload) => {
+        try {
+          const rec: any = payload.new || payload.old;
+          if (!rec) return;
+
+          // Normalize participant to player shape
+          const participant = {
+            id: rec.child_id || rec.id,
+            name: rec.player_name,
+            avatar: rec.player_avatar,
+            isAI: !!rec.is_ai,
+            status: 'active' as const,
+          };
+
+          setPlayers(prev => {
+            const isInsertOrUpdate = !!payload.new;
+            const isDelete = !payload.new && !!payload.old;
+
+            if (isInsertOrUpdate) {
+              const exists = prev.some(p => p.id === participant.id);
+              if (exists) {
+                return prev.map(p => p.id === participant.id ? { ...p, ...participant } : p);
+              }
+              return [...prev, participant];
+            }
+
+            if (isDelete) {
+              return prev.filter(p => p.id !== participant.id);
+            }
+
+            return prev;
+          });
+        } catch (e) {
+          console.error('Error handling room_participants realtime payload', e);
+        }
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [currentRoom?.id]);
 
   const joinRoom = async () => {
     console.log('Join room clicked, selectedChild:', selectedChild, 'childrenProfiles:', childrenProfiles, 'roomCode:', joinRoomCode);
@@ -633,13 +753,50 @@ const GameRoomModal = ({ isOpen, onClose, gameId, difficulty, onStartGame, invit
 
                   {/* Action Buttons */}
                   <div className="flex gap-2">
-                    <Button 
-                      onClick={() => onStartGame(roomCode)}
-                      className="flex-1"
-                      disabled={players.length < 1}
-                    >
-                      {currentRoom.status === 'playing' ? 'Rejoin Game' : 'Start Game'} ({players.length} players)
-                    </Button>
+                    {currentRoom && selectedChild && currentRoom.host_child_id === selectedChild.id ? (
+                      // Host view
+                      !currentRoom.selected_category ? (
+                        // No theme selected yet: show Select Theme once another human has joined
+                        <Button
+                          onClick={() => handleSelectThemeForAll(roomCode)}
+                          className="flex-1"
+                          disabled={humanPlayersCount < 2}
+                        >
+                          Select Theme ({players.length} players)
+                        </Button>
+                      ) : (
+                        // Theme already selected: show Start Game (or Rejoin if already playing)
+                        <Button
+                          onClick={async () => {
+                            try {
+                              // mark room as playing so everyone transitions
+                              await supabase
+                                .from('game_rooms')
+                                .update({ status: 'playing' })
+                                .eq('room_code', roomCode);
+                            } catch (e) {
+                              console.error('Failed to set room as playing', e);
+                            }
+                            onStartGame(roomCode);
+                          }}
+                          className="flex-1"
+                          disabled={!canStart}
+                        >
+                          {currentRoom.status === 'playing' ? 'Rejoin Game' : 'Start Game'} ({players.length} players)
+                        </Button>
+                      )
+                    ) : (
+                      // Non-host view: show contextual waiting messages
+                      <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
+                        {!currentRoom?.selected_category
+                          ? 'Waiting for the host to select the theme and start the game…'
+                          : currentRoom?.status !== 'playing'
+                            ? 'Waiting for the host to start the game…'
+                            : 'Rejoining game...'
+                        }
+                      </div>
+                    )}
+
                     <Button 
                       variant="outline" 
                       onClick={leaveRoom}
@@ -648,7 +805,14 @@ const GameRoomModal = ({ isOpen, onClose, gameId, difficulty, onStartGame, invit
                     </Button>
                   </div>
 
-                  <div className="text-xs text-muted-foreground text-center">
+                  {/* Show waiting-for-players message only to the host when they don't have enough players yet */}
+                  {!canStart && currentRoom && selectedChild && currentRoom.host_child_id === selectedChild.id && (
+                    <div className="text-sm text-center text-muted-foreground mt-2">
+                      Waiting for the other player to join…
+                    </div>
+                  )}
+
+                  <div className="text-xs text-muted-foreground text-center mt-2">
                     💡 Can start with AI friend! More players can join during the game
                   </div>
                 </>
