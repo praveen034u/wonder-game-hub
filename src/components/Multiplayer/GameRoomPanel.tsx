@@ -125,11 +125,13 @@ const GameRoomPanel = ({ roomCode, gameId, onPlayerJoin, players: externalPlayer
           if (scores) {
             const scoreMap: Record<string, { score: number; totalQuestions: number }> = {};
             scores.forEach((s: any) => {
+              // Use child_id as primary key, fall back to player_name for AI players
               const playerId = s.child_id || s.player_name;
               scoreMap[playerId] = {
                 score: s.score || 0,
                 totalQuestions: s.total_questions || 0
               };
+              console.log('Score loaded for player:', playerId, 'Score:', s.score, 'Total questions:', s.total_questions);
             });
             setPlayerScores(scoreMap);
           }
@@ -160,7 +162,9 @@ const GameRoomPanel = ({ roomCode, gameId, onPlayerJoin, players: externalPlayer
           }, (payload) => {
             const scoreData: any = payload.new || payload.old;
             if (scoreData) {
+              // Use child_id as primary key, fall back to player_name for AI players
               const playerId = scoreData.child_id || scoreData.player_name;
+              console.log('Score updated for player:', playerId, 'Score:', scoreData.score, 'Total questions:', scoreData.total_questions);
               setPlayerScores(prev => ({
                 ...prev,
                 [playerId]: {
@@ -442,7 +446,7 @@ const GameRoomPanel = ({ roomCode, gameId, onPlayerJoin, players: externalPlayer
                             <span className="text-xs font-bold text-primary">{player.score}</span>
                           )}
                         </div>
-                        {typeof player.totalQuestions === 'number' && player.totalQuestions > 0 && (
+                        {typeof player.totalQuestions === 'number' && (
                           <div className="text-[10px] text-muted-foreground mt-0.5">
                             {player.totalQuestions} question{player.totalQuestions !== 1 ? 's' : ''} attempted
                           </div>

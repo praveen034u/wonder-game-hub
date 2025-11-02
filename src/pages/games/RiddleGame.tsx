@@ -151,7 +151,7 @@ const RiddleGame = () => {
             // Subscribe to participant changes to keep the player list in sync (but DO NOT auto-start)
             const channel = supabase
               .channel(`riddle-room-participants-${roomData.id}`)
-              .on('postgres_changes', { event: '*', schema: 'public', table: 'room_participants', filter: `room_id=eq.${roomData.id}` }, (payload) => {
+              .on('postgres_changes', { event: '*', schema: 'public', table: 'room_participants', filter: `room_id=eq.${roomData.id}` }, async (payload) => {
                 const rec: any = payload.new || payload.old;
                 if (!rec) return;
                 const newPlayer: Player = {
@@ -166,10 +166,12 @@ const RiddleGame = () => {
                   if (exists) return prev.map(p => p.id === newPlayer.id ? { ...p, ...newPlayer } : p);
                   const next = [...prev, newPlayer];
                   playersRef.current = next;
-                  // when enough players arrive, clear waiting but do not auto-start
-                  if (next.some(p => p.isAI) || next.length >= 2) {
-                    setWaitingForPlayers(false);
+                  
+                  // Initialize score entry for the new player
+                  if (!exists && payload.eventType === 'INSERT') {
+                    initializeGameScores(roomData.id, next).catch((e) => console.error('Error initializing game scores for new player:', e));
                   }
+                  
                   return next;
                 });
               })
@@ -185,9 +187,10 @@ const RiddleGame = () => {
             // Subscribe to participant changes even while waiting
             const channel = supabase
               .channel(`riddle-room-participants-waiting-${roomData.id}`)
-              .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'room_participants', filter: `room_id=eq.${roomData.id}` }, (payload) => {
+              .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'room_participants', filter: `room_id=eq.${roomData.id}` }, async (payload) => {
                 const rec: any = payload.new;
                 if (!rec) return;
+                console.log('New player joined:', rec);
                 const newPlayer: Player = {
                   id: rec.child_id || rec.id,
                   name: rec.player_name,
@@ -195,18 +198,30 @@ const RiddleGame = () => {
                   score: 0,
                   isAI: rec.is_ai
                 };
+                
+                let updatedPlayers: Player[] = [];
                 setPlayers(prev => {
                   const exists = prev.some(p => p.id === newPlayer.id);
                   if (exists) return prev;
                   const next = [...prev, newPlayer];
                   playersRef.current = next;
+                  updatedPlayers = next;
+                  
+                  console.log('Updated players count:', next.length, 'Human players:', next.filter(p => !p.isAI).length);
+                  
                   // when second player arrives, we can move forward
                   if (next.length >= 2) {
+                    console.log('Enabling theme selection');
                     setWaitingForPlayers(false);
                     setGamePhase('theme-select');
                   }
                   return next;
                 });
+                
+                // Initialize score entry for the new player
+                if (updatedPlayers.length > 0) {
+                  await initializeGameScores(roomData.id, updatedPlayers).catch((e) => console.error('Error initializing game scores for new player:', e));
+                }
               })
               .subscribe();
 
@@ -243,26 +258,33 @@ const RiddleGame = () => {
 
   const initializeGameScores = async (roomId: string, playerList: Player[]) => {
     try {
-      // Clear existing scores for this room
-      await supabase
+      // Get existing score entries
+      const { data: existingScores } = await supabase
         .from('multiplayer_game_scores')
-        .delete()
+        .select('child_id, player_name')
         .eq('room_id', roomId);
       
-      // Insert initial scores for all players
-      const scoreEntries = playerList.map(player => ({
-        room_id: roomId,
-        child_id: player.isAI ? null : player.id,
-        player_name: player.name,
-        player_avatar: player.avatar,
-        is_ai: player.isAI || false,
-        score: 0,
-        total_questions: 0
-      }));
+      const existingIds = new Set(existingScores?.map(s => s.child_id || s.player_name) || []);
+      
+      // Only insert scores for players that don't already have entries
+      const newScoreEntries = playerList
+        .filter(player => !existingIds.has(player.id) && !existingIds.has(player.name))
+        .map(player => ({
+          room_id: roomId,
+          child_id: player.isAI ? null : player.id,
+          player_name: player.name,
+          player_avatar: player.avatar,
+          is_ai: player.isAI || false,
+          score: 0,
+          total_questions: 0
+        }));
 
-      await supabase
-        .from('multiplayer_game_scores')
-        .insert(scoreEntries);
+      if (newScoreEntries.length > 0) {
+        await supabase
+          .from('multiplayer_game_scores')
+          .insert(newScoreEntries);
+        console.log('Initialized scores for new players:', newScoreEntries.map(e => e.player_name));
+      }
     } catch (error) {
       console.error('Error initializing game scores:', error);
     }
