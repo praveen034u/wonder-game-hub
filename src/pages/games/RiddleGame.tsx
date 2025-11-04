@@ -31,13 +31,21 @@ const RiddleGame = () => {
   const { selectedChild } = useAppContext();
   const { updateGameResult } = useProgress();
   const { toast } = useToast();
+
   // Local UI / game state
   const difficulty = searchParams.get('difficulty') || 'easy';
   const paramRoom = searchParams.get('room')?.toUpperCase() || null;
 
   const [roomCode, setRoomCode] = useState<string | null>(paramRoom);
-  const [players, setPlayers] = useState<Player[]>([]);
+  const [players, _setPlayers] = useState<Player[]>([]);
   const playersRef = useRef<Player[]>([]);
+  const setPlayersSafe = (next: Player[] | ((prev: Player[]) => Player[])) => {
+    // functional or direct update supported
+    const resolved = typeof next === 'function' ? (next as (p: Player[]) => Player[])(playersRef.current) : next;
+    playersRef.current = resolved;
+    _setPlayers(resolved);
+  };
+
   const [selectedCategory, setSelectedCategory] = useState<string>('Zoo Animals');
   const [gamePhase, setGamePhase] = useState<GamePhase>('theme-select');
   const [waitingForPlayers, setWaitingForPlayers] = useState(false);
@@ -53,8 +61,20 @@ const RiddleGame = () => {
   const fallbackTimeoutRef = useRef<number | null>(null);
   const gameTimerRef = useRef<number | null>(null);
   const feedbackTimeoutRef = useRef<number | null>(null);
+  const [playerProgress, setPlayerProgress] = useState({});
+  const playerProgressRef = useRef({});
 
   const GAME_DURATION = 300; // 5 minutes
+
+  // Room state
+  const [isRoomCreator, setIsRoomCreator] = useState(false);
+  const [pendingJoinRequests, setPendingJoinRequests] = useState(0);
+  const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
+
+  // UI states related to Q/A
+  const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [countdown, setCountdown] = useState(3);
 
   // Initialize room or single-player when params or selectedChild change
   useEffect(() => {
@@ -63,7 +83,7 @@ const RiddleGame = () => {
 
     if (param) {
       // multiplayer mode: load participants from DB
-      loadRoomData();
+      loadRoomData(param);
     } else {
       // single player default setup
       const playerName = selectedChild?.name || 'Player';
@@ -83,22 +103,24 @@ const RiddleGame = () => {
           isAI: true
         }
       ];
-      setPlayers(newPlayers);
-      playersRef.current = newPlayers;
+      setPlayersSafe(newPlayers);
+      // move to countdown mode
+      setGamePhase('countdown');
       startCountdown();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, selectedChild]);
 
-  const loadRoomData = async () => {
-    if (!roomCode || !selectedChild) return;
+  const loadRoomData = async (roomCodeParam?: string | null) => {
+    const rc = roomCodeParam ?? roomCode;
+    if (!rc || !selectedChild) return;
 
     try {
       // Get room details
       const { data: roomData } = await supabase
         .from('game_rooms')
         .select('*')
-        .eq('room_code', roomCode)
+        .eq('room_code', rc)
         .single();
 
       if (roomData) {
@@ -111,27 +133,26 @@ const RiddleGame = () => {
           .select('*')
           .eq('room_id', roomData.id);
 
-        if (participants) {
-          const playerList: Player[] = participants.map(p => ({
+        if (participants && participants.length) {
+          const playerList: Player[] = participants.map((p: any) => ({
             id: p.child_id || p.id,
-            name: p.player_name,
+            name: p.player_name || 'Player',
             avatar: p.player_avatar || '👤',
             score: 0,
-            isAI: p.is_ai
+            isAI: !!p.is_ai
           }));
-          
-          setPlayers(playerList);
+
+          setPlayersSafe(playerList);
 
           // Multiplayer: when another human joins, do NOT auto-start the game.
-          // Instead, present the theme-selection flow. Only start automatically if an AI is present and
-          // this client should proceed as single-player vs AI.
           const hasAI = playerList.some(p => p.isAI);
+          const humanCount = playerList.filter(p => !p.isAI).length;
+
           if (hasAI && playerList.length === 1) {
             // solo with AI: proceed to countdown
+            setGamePhase('countdown');
             startCountdown();
-            initializeGameScores(roomData.id, playerList).catch((e) => {
-              console.error('Error initializing game scores:', e);
-            });
+            await initializeGameScores(roomData.id, playerList);
           } else if (playerList.length >= 2) {
             // Two or more humans: show theme selection / waiting state until host chooses a theme
             setWaitingForPlayers(false);
@@ -141,7 +162,8 @@ const RiddleGame = () => {
             }
             if (roomData.status === 'playing' && (roomData as any).selected_category) {
               // If the server already marked the room as playing, start immediately
-              initializeGameScores(roomData.id, playerList).catch((e) => console.error('Error initializing game scores:', e));
+              await initializeGameScores(roomData.id, playerList);
+              setGamePhase('countdown');
               startCountdown();
             } else {
               // stay in theme-select so host can pick theme; guests will see waiting messages
@@ -156,12 +178,12 @@ const RiddleGame = () => {
                 if (!rec) return;
                 const newPlayer: Player = {
                   id: rec.child_id || rec.id,
-                  name: rec.player_name,
+                  name: rec.player_name || 'Player',
                   avatar: rec.player_avatar || '👤',
                   score: 0,
-                  isAI: rec.is_ai
+                  isAI: !!rec.is_ai
                 };
-                setPlayers(prev => {
+                setPlayersSafe(prev => {
                   const exists = prev.some(p => p.id === newPlayer.id);
                   if (exists) return prev.map(p => p.id === newPlayer.id ? { ...p, ...newPlayer } : p);
                   const next = [...prev, newPlayer];
@@ -175,11 +197,16 @@ const RiddleGame = () => {
               .subscribe();
 
             // cleanup subscription when leaving
-            const unsubscribe = () => supabase.removeChannel(channel);
+            const unsubscribe = () => {
+              try {
+                supabase.removeChannel(channel);
+              } catch (e) { /* ignore */ }
+            };
             (window as any).__riddle_room_cleanup = unsubscribe;
           } else {
             // Wait for additional players to join
             setWaitingForPlayers(true);
+            setGamePhase('theme-select');
           }
 
           // Initialize scores in database in background
@@ -187,23 +214,39 @@ const RiddleGame = () => {
             console.error('Error initializing game scores:', e);
           });
         } else {
-          // No participants found, still start the game
+          // No participants found, still start the game for the host (solo)
+          setPlayersSafe([{
+            id: selectedChild.id || 'player1',
+            name: selectedChild.name || 'Player',
+            avatar: selectedChild.avatar || '👤',
+            score: 0
+          }]);
+          setGamePhase('countdown');
           startCountdown();
         }
       } else {
-        // If room not found, still proceed to start
+        // If room not found, fallback to single player
+        const playerName = selectedChild?.name || 'Player';
+        setPlayersSafe([{
+          id: selectedChild?.id || 'player1',
+          name: playerName,
+          avatar: selectedChild?.avatar || '👤',
+          score: 0
+        }]);
+        setGamePhase('countdown');
         startCountdown();
       }
     } catch (error) {
       console.error('Error loading room data:', error);
       // Fallback to single player
       const playerName = selectedChild?.name || 'Player';
-      setPlayers([{
+      setPlayersSafe([{
         id: selectedChild?.id || 'player1',
         name: playerName,
         avatar: selectedChild?.avatar || '👤',
         score: 0
       }]);
+      setGamePhase('countdown');
       startCountdown();
     }
   };
@@ -215,7 +258,7 @@ const RiddleGame = () => {
         .from('multiplayer_game_scores')
         .delete()
         .eq('room_id', roomId);
-      
+
       // Insert initial scores for all players
       const scoreEntries = playerList.map(player => ({
         room_id: roomId,
@@ -235,41 +278,65 @@ const RiddleGame = () => {
     }
   };
 
+  const clearIntervalRef = (ref: React.MutableRefObject<number | null>) => {
+    if (ref.current) {
+      try { window.clearInterval(ref.current); } catch (e) { /* ignore */ }
+      ref.current = null;
+    }
+  };
+  const clearTimeoutRef = (ref: React.MutableRefObject<number | null>) => {
+    if (ref.current) {
+      try { window.clearTimeout(ref.current); } catch (e) { /* ignore */ }
+      ref.current = null;
+    }
+  };
+
   const startCountdown = () => {
     if (gameEndedRef.current) return; // don't start if game already finished
 
+    // ensure the UI is aware we're in countdown
+    setGamePhase('countdown');
+
     // Clear any existing timer
-    if (countdownTimerRef.current) {
-      window.clearInterval(countdownTimerRef.current);
-      countdownTimerRef.current = null;
-    }
+    clearIntervalRef(countdownTimerRef);
+    clearTimeoutRef(fallbackTimeoutRef);
+
     let count = 3;
     setCountdown(count);
+
     const id = window.setInterval(() => {
       count -= 1;
       setCountdown(count);
       if (count <= 0) {
-        window.clearInterval(id);
+        try { window.clearInterval(id); } catch (e) { /* ignore */ }
         countdownTimerRef.current = null;
+        // move to playing and start game timer
         setGamePhase('playing');
         startGameTimer();
       }
     }, 1000);
     countdownTimerRef.current = id;
+
+    // Hard fallback: force transition after 4.5s even if interval fails
+    fallbackTimeoutRef.current = window.setTimeout(() => {
+      if (!gameEndedRef.current) {
+        setGamePhase('playing');
+        startGameTimer();
+      }
+    }, 4500);
   };
 
   const startGameTimer = () => {
     if (gameEndedRef.current) return; // guard against restarting after finish
 
     // Clear any existing game timer
-    if (gameTimerRef.current) {
-      window.clearInterval(gameTimerRef.current);
-    }
+    clearIntervalRef(gameTimerRef);
+
     setGameTimer(GAME_DURATION);
     const id = window.setInterval(() => {
       setGameTimer(prev => {
         if (prev <= 1) {
-          window.clearInterval(id);
+          try { window.clearInterval(id); } catch (e) { /* ignore */ }
           gameTimerRef.current = null;
           finishGame();
           return 0;
@@ -279,57 +346,43 @@ const RiddleGame = () => {
     }, 1000);
     gameTimerRef.current = id;
   };
-const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
-const [showFeedback, setShowFeedback] = useState(false);
-const [countdown, setCountdown] = useState(3);
 
-// Failsafe: ensure transition to playing when countdown completes
-useEffect(() => {
-  if (gamePhase === 'countdown' && countdown <= 0) {
-    setGamePhase('playing');
-  }
-}, [countdown, gamePhase]);
-
-// Hard fallback: force transition after 4.5s even if interval fails
-useEffect(() => {
-  if (gamePhase === 'countdown') {
-    if (fallbackTimeoutRef.current) {
-      window.clearTimeout(fallbackTimeoutRef.current);
-    }
-    fallbackTimeoutRef.current = window.setTimeout(() => {
+  // Failsafe: ensure transition to playing when countdown completes (keeps UI consistent)
+  useEffect(() => {
+    if (gamePhase === 'countdown' && countdown <= 0) {
       setGamePhase('playing');
-    }, 4500);
-  }
-  return () => {
-    if (fallbackTimeoutRef.current) {
-      window.clearTimeout(fallbackTimeoutRef.current);
+      startGameTimer();
     }
-  };
-}, [gamePhase]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [countdown, gamePhase]);
 
-// Cleanup timers on unmount
-useEffect(() => {
-  return () => {
-    if (countdownTimerRef.current) window.clearInterval(countdownTimerRef.current);
-    if (fallbackTimeoutRef.current) window.clearTimeout(fallbackTimeoutRef.current);
-    if (gameTimerRef.current) window.clearInterval(gameTimerRef.current);
-  };
-}, []);
+  // Cleanup timers on unmount
+  useEffect(() => {
+    return () => {
+      clearIntervalRef(countdownTimerRef);
+      clearTimeoutRef(fallbackTimeoutRef);
+      clearIntervalRef(gameTimerRef);
+      clearTimeoutRef(feedbackTimeoutRef);
 
-const [isRoomCreator, setIsRoomCreator] = useState(false);
-const [pendingJoinRequests, setPendingJoinRequests] = useState(0);
-const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
+      // remove any supabase channel cleanup
+      const cleanup = (window as any).__riddle_room_cleanup;
+      if (typeof cleanup === 'function') {
+        try { cleanup(); } catch (e) { /* ignore */ }
+        delete (window as any).__riddle_room_cleanup;
+      }
+    };
+  }, []);
 
   // Get riddles for selected category and difficulty
   const getCategoryRiddles = (category: string) => {
-    const categoryData = riddlesData[category as keyof typeof riddlesData];
-    if (categoryData && categoryData[difficulty as keyof typeof categoryData]) {
-      return categoryData[difficulty as keyof typeof categoryData] as Riddle[];
+    const categoryData = (riddlesData as any)[category];
+    if (categoryData && categoryData[difficulty]) {
+      return categoryData[difficulty] as Riddle[];
     }
     return [];
   };
-  
-  const gameRiddles = getCategoryRiddles(selectedCategory);
+
+  const gameRiddles = getCategoryRiddles(selectedCategory) || [];
   const currentRiddle = gameRiddles[currentRiddleIndex];
 
   const humanPlayersCount = players.filter(p => !p.isAI).length;
@@ -338,23 +391,20 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
 
   const simulateAIAnswers = () => {
     // Simulate AI players answering with random delays
-    const aiPlayers = players.filter(p => p.isAI);
+    const aiPlayers = playersRef.current.filter(p => p.isAI);
     aiPlayers.forEach((aiPlayer, index) => {
+      const delay = (index + 1) * 1500 + Math.random() * 1000;
       setTimeout(async () => {
-        const isCorrect = Math.random() > 0.4; // 60% chance of correct answer
+        const isCorrect = Math.random() > 0.4; // 60% chance correct
         if (isCorrect) {
-         setPlayers(prev => {
-            const next = prev.map(p => p.id === aiPlayer.id ? { ...p, score: p.score + 1 } : p);
-            playersRef.current = next;
-            return next;
-          });
+          // update local score
+          setPlayersSafe(prev => prev.map(p => p.id === aiPlayer.id ? { ...p, score: p.score + 1 } : p));
         }
-        
         // Update AI score in database for multiplayer
         if (currentRoomId) {
           await updateAIPlayerScore(aiPlayer.id, isCorrect ? 1 : 0);
         }
-      }, (index + 1) * 1500 + Math.random() * 1000);
+      }, delay);
     });
   };
 
@@ -362,13 +412,16 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
     if (!currentRoomId) return;
 
     try {
+      // Find the AI entry by name within this room (child_id null)
+      const aiPlayer = playersRef.current.find(p => p.id === aiPlayerId);
+      if (!aiPlayer) return;
       const { data: currentScore } = await supabase
         .from('multiplayer_game_scores')
         .select('score, total_questions')
         .eq('room_id', currentRoomId)
         .eq('is_ai', true)
         .eq('child_id', null)
-        .eq('player_name', players.find(p => p.id === aiPlayerId)?.name)
+        .eq('player_name', aiPlayer.name)
         .single();
 
       if (currentScore) {
@@ -381,7 +434,7 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
           .eq('room_id', currentRoomId)
           .eq('is_ai', true)
           .eq('child_id', null)
-          .eq('player_name', players.find(p => p.id === aiPlayerId)?.name);
+          .eq('player_name', aiPlayer.name);
       }
     } catch (error) {
       console.error('Error updating AI player score:', error);
@@ -390,7 +443,7 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
 
   const handlePlayerJoin = (newPlayer: any) => {
     // Add new player if not already in the list
-    const exists = players.find(p => p.id === newPlayer.id);
+    const exists = playersRef.current.find(p => p.id === newPlayer.id);
     if (!exists && gamePhase === 'playing') {
       // Show dialog asking if game should restart
       setNewPlayerInfo({
@@ -402,7 +455,7 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
       });
       setShowNewPlayerDialog(true);
     } else if (!exists) {
-      setPlayers(prev => [...prev, {
+      setPlayersSafe(prev => [...prev, {
         id: newPlayer.id,
         name: newPlayer.name,
         avatar: newPlayer.avatar,
@@ -414,7 +467,7 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
 
   const handleNewPlayerResponse = (restart: boolean) => {
     if (newPlayerInfo) {
-      setPlayers(prev => [...prev, newPlayerInfo]);
+      setPlayersSafe(prev => [...prev, newPlayerInfo]);
       if (restart) {
         handlePlayAgain();
       }
@@ -424,69 +477,88 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
   };
 
   const handleAnswerSelect = async (answer: string) => {
-   if (showFeedback || gameEndedRef.current) return;
-   if (!currentRiddle) return;
+    if (showFeedback || gameEndedRef.current) return;
+    if (!currentRiddle) return;
 
-   setSelectedAnswer(answer);
-   setShowFeedback(true);
+    setSelectedAnswer(answer);
+    setShowFeedback(true);
 
-   const correctIdx = currentRiddle.correctAnswer;
-   const correctText = currentRiddle.options[correctIdx];
-   const isCorrect = answer === correctText;
+    const correctIdx = currentRiddle.correctAnswer;
+    const correctText = currentRiddle.options[correctIdx];
+    const isCorrect = answer === correctText;
 
-   const playerId = selectedChild?.id ?? 'player1';
-   const scoreIncrement = isCorrect ? 1 : 0; // adjust scoring rule if needed
+    const playerId = selectedChild?.id ?? 'player1';
+    const scoreIncrement = isCorrect ? 1 : 0; // adjust scoring rule if needed
 
-   // Update local score (functional update) and ref immediately
-    setPlayers(prev => {
-      const next = prev.map(p => (p.id === playerId ? { ...p, score: p.score + scoreIncrement } : p));
-      playersRef.current = next;
-      return next;
-    });
+    // Update local score (only once) and ref immediately
+    setPlayersSafe(prev => prev.map(p => p.id === playerId ? { ...p, score: p.score + scoreIncrement } : p));
 
-   // Persist score if room-based multiplayer
-   if (currentRoomId) {
-     try {
-       await updatePlayerScore(playerId, scoreIncrement);
-     } catch (err) {
-       console.error('updatePlayerScore failed', err);
-     }
-   }
+    // Persist score if room-based multiplayer (persist only; local update already applied)
+    if (currentRoomId) {
+      try {
+        await updatePlayerScore(playerId, scoreIncrement);
+      } catch (err) {
+        console.error('updatePlayerScore failed', err);
+      }
+    }
 
-   // simulate AI answers (unchanged)
-   simulateAIAnswers();
+    // simulate AI answers (unchanged)
+    simulateAIAnswers();
 
-   // store feedback timeout so finishGame can clear it
-   if (feedbackTimeoutRef.current) {
-     clearTimeout(feedbackTimeoutRef.current);
-     feedbackTimeoutRef.current = null;
-   }
-   feedbackTimeoutRef.current = window.setTimeout(() => {
-     setShowFeedback(false);
-     setSelectedAnswer(null);
-     // advance question only if game not ended
-     if (!gameEndedRef.current) nextQuestion();
-     feedbackTimeoutRef.current = null;
-   }, 2000);
- };
+    // store feedback timeout so finishGame can clear it
+    clearTimeoutRef(feedbackTimeoutRef);
+    feedbackTimeoutRef.current = window.setTimeout(() => {
+      setShowFeedback(false);
+      setSelectedAnswer(null);
+      // advance question only if game not ended
+      if (!gameEndedRef.current) nextQuestion();
+      feedbackTimeoutRef.current = null;
+    }, 2000);
+  };
 
   const updatePlayerScore = async (playerId: string, scoreIncrement: number) => {
-    // Update local state using functional update to avoid stale state
-    setPlayers(prev => {
-      const next = prev.map(p => (p.id === playerId ? { ...p, score: p.score + scoreIncrement } : p));
-      playersRef.current = next;
-      return next;
-    });
-
-    // If using multiplayer rooms, persist to server (keep try/catch to avoid crash)
+    // Persist only; local state should be updated by caller via setPlayersSafe
     if (!currentRoomId) return;
     try {
-      // ...existing server update logic (e.g. await db.updatePlayerScore(...)) ...
+      // Find the player's DB row
+      const player = playersRef.current.find(p => p.id === playerId);
+      if (!player) return;
+
+      // Attempt to get existing row
+      const { data: currentScore } = await supabase
+        .from('multiplayer_game_scores')
+        .select('score, total_questions')
+        .eq('room_id', currentRoomId)
+        .eq('player_name', player.name)
+        .maybeSingle();
+
+      if (currentScore) {
+        await supabase
+          .from('multiplayer_game_scores')
+          .update({
+            score: currentScore.score + scoreIncrement,
+            total_questions: currentScore.total_questions + 1
+          })
+          .eq('room_id', currentRoomId)
+          .eq('player_name', player.name);
+      } else {
+        // If row missing, insert a row for this player
+        await supabase
+          .from('multiplayer_game_scores')
+          .insert([{
+            room_id: currentRoomId,
+            child_id: player.isAI ? null : playerId,
+            player_name: player.name,
+            player_avatar: player.avatar,
+            is_ai: player.isAI || false,
+            score: scoreIncrement,
+            total_questions: 1
+          }]);
+      }
     } catch (err) {
       console.error('Failed to persist player score', err);
     }
   };
-  
 
   const nextQuestion = () => {
     if (currentRiddleIndex < gameRiddles.length - 1) {
@@ -500,8 +572,10 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
   };
 
   const finishGame = () => {
-     // compute and store a final snapshot before switching to complete phase
-    const finalPlayers = playersRef.current && playersRef.current.length ? playersRef.current : players;
+    if (gameEndedRef.current) return; // idempotent
+
+    // compute and store a final snapshot before switching to complete phase
+    const finalPlayers = (playersRef.current && playersRef.current.length) ? playersRef.current : players;
     const playerScore = finalPlayers.find(p => p.id === (selectedChild?.id || 'player1'))?.score ?? 0;
 
     // store snapshot into state so UI reads this stable copy
@@ -511,23 +585,12 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
     // now switch phase — scoreboard will read from the snapshot
     setGamePhase('complete');
     gameEndedRef.current = true;
+
     // Clear any running timers so nothing restarts the game
-    if (countdownTimerRef.current) {
-      clearInterval(countdownTimerRef.current);
-      countdownTimerRef.current = null;
-    }
-    if (gameTimerRef.current) {
-      clearInterval(gameTimerRef.current);
-      gameTimerRef.current = null;
-    }
-    if (fallbackTimeoutRef.current) {
-      clearTimeout(fallbackTimeoutRef.current);
-      fallbackTimeoutRef.current = null;
-    }
-    if (feedbackTimeoutRef.current) {
-      clearTimeout(feedbackTimeoutRef.current);
-      feedbackTimeoutRef.current = null;
-    }
+    clearIntervalRef(countdownTimerRef);
+    clearIntervalRef(gameTimerRef);
+    clearTimeoutRef(fallbackTimeoutRef);
+    clearTimeoutRef(feedbackTimeoutRef);
 
     // compute totals & persist using the snapshot
     const totalQuestions = Math.max(1, currentRiddleIndex + 1);
@@ -546,7 +609,7 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
       endedAt: new Date().toISOString()
     };
     updateGameResult(gameResult);
-    
+
     toast({
       title: `Game Complete! ${starsEarned} ⭐`,
       description: `You got ${playerScore}/${totalQuestions} correct!`,
@@ -554,17 +617,16 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
   };
 
   const handlePlayAgain = () => {
+    // reset runtime flags
+    gameEndedRef.current = false;
     setCurrentRiddleIndex(0);
     setSelectedAnswer(null);
     setShowFeedback(false);
-    
+
     // Reset scores but keep players
-      setPlayers(prev => {
-      const next = prev.map(p => ({ ...p, score: 0 }));
-      playersRef.current = next;
-      return next;
-      });    
-    // Go directly to playing phase, restart game timer
+    setPlayersSafe(prev => prev.map(p => ({ ...p, score: 0 })));
+
+    // Go directly to countdown/playing phase, restart game timer
     setGamePhase('playing');
     startGameTimer();
   };
@@ -626,9 +688,16 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
           setWaitingForPlayers(false);
         }
 
+        // Sync player progress if present
+        if (rec.player_progress) {
+          setPlayerProgress(rec.player_progress);
+          playerProgressRef.current = rec.player_progress;
+        }
+
         // Only transition to countdown when server sets status='playing'
         if (rec.status === 'playing') {
           setGamePhase('countdown');
+          startCountdown();
         }
       })
       .subscribe();
@@ -670,7 +739,7 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
 
   // Theme Selection Phase
   if (gamePhase === 'theme-select') {
-    const availableThemes = Object.keys(riddlesData);
+    const availableThemes = Object.keys(riddlesData as any);
     return (
       <div className="min-h-screen bg-gradient-to-br from-primary/20 to-secondary/20">
         <AppHeader title="Select Theme" showBackButton />
@@ -763,22 +832,18 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
     );
   }
 
- // Game Complete Phase — render using the stable snapshot (finalPlayersSnapshot)
+  // Game Complete Phase — render using the stable snapshot (finalPlayersSnapshot)
   if (gamePhase === 'complete') {
-      const finalPlayers = finalPlayersSnapshot ?? (playersRef.current.length ? playersRef.current : players);
-      // use ?? consistently to avoid mixing ?? with ||
-      const playerScore = finalPlayerScore ?? finalPlayers.find(p => p.id === (selectedChild?.id || 'player1'))?.score ?? 0;
-      const totalQuestions = Math.max(1, currentRiddleIndex + 1);
-      const percentage = (playerScore / totalQuestions) * 100;
+    const finalPlayers = finalPlayersSnapshot ?? (playersRef.current.length ? playersRef.current : players);
+    const playerScore = finalPlayerScore ?? finalPlayers.find(p => p.id === (selectedChild?.id || 'player1'))?.score ?? 0;
+    const totalQuestions = Math.max(1, currentRiddleIndex + 1);
+    const percentage = (playerScore / totalQuestions) * 100;
 
-      // derive stars and a stable sorted list for the scoreboard render
-      let starsEarned = 1;
-      if (percentage >= 80) starsEarned = 3;
-      else if (percentage >= 60) starsEarned = 2;
+    let starsEarned = 1;
+    if (percentage >= 80) starsEarned = 3;
+    else if (percentage >= 60) starsEarned = 2;
 
-      const sortedPlayers = [...finalPlayers].sort((a, b) => b.score - a.score);
-
-
+    const sortedPlayers = [...finalPlayers].sort((a, b) => b.score - a.score);
 
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/20 via-secondary/20 to-accent/20 p-4">
@@ -804,8 +869,8 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
                   <span className="text-xl font-bold text-primary">{player.score}</span>
                 </div>
               ))}
-              
-             <div className="flex justify-center mt-4">
+
+              <div className="flex justify-center mt-4">
                 {Array.from({ length: 3 }, (_, i) => (
                   <span key={i} className={`text-2xl ${i < starsEarned ? 'text-yellow-500' : 'text-gray-300'}`}>
                     ⭐
@@ -813,16 +878,16 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
                 ))}
               </div>
             </div>
-                              
+
             <div className="space-y-3">
-              <Button 
+              <Button
                 onClick={handlePlayAgain}
                 className="w-full bg-primary hover:bg-primary/90 text-white"
                 size="lg"
               >
                 Play Again 🔄
               </Button>
-              <Button 
+              <Button
                 onClick={() => navigate('/games')}
                 variant="outline"
                 className="w-full border-input hover:bg-secondary/10"
@@ -830,7 +895,7 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
               >
                 Back to Games
               </Button>
-              <Button 
+              <Button
                 onClick={() => navigate('/progress')}
                 variant="outline"
                 className="w-full border-input hover:bg-secondary/10"
@@ -860,9 +925,7 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
     );
   }
 
-  // Playing Phase  
-  // compute once whether scores should be visible
-
+  // Playing Phase
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/20 via-secondary/20 to-accent/20 p-4">
       {/* Join Request Notification Banner */}
@@ -925,8 +988,6 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
                     </Avatar>
                     <span className="text-sm truncate">{idx === 0 ? `👑 ${player.name}` : player.name}</span>
                   </div>
-                  {/* show real scores only when gamePhase is 'complete' (end screen uses a different layout anyway) */}
-                 
                 </div>
               ))}
             </div>
@@ -961,19 +1022,18 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
         </div>
       )}
 
-  {gamePhase !== 'playing' && (
-  <GameRoomPanel 
-    roomCode={roomCode} 
-    gameId={gameId || 'riddle'}
-    onPlayerJoin={handlePlayerJoin}
-    players={players}
-    gameMode={roomCode ? 'multiplayer' : 'single'}
-    onJoinRequestUpdate={handleJoinRequestUpdate}
-  />
-)}
+      {gamePhase !== 'playing' && (
+        <GameRoomPanel
+          roomCode={roomCode}
+          gameId={gameId || 'riddle'}
+          onPlayerJoin={handlePlayerJoin}
+          players={players}
+          gameMode={roomCode ? 'multiplayer' : 'single'}
+          onJoinRequestUpdate={handleJoinRequestUpdate}
+        />
+      )}
 
       <div className="max-w-md mx-auto">
-        
         <Card className="bg-white/90 shadow-xl">
           <CardHeader className="text-center">
             <CardTitle className="text-xl font-fredoka text-primary">
@@ -984,15 +1044,15 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
               <span className="text-2xl">🐵</span>
               <span className="text-2xl">🐘</span>
             </div>
-            <Progress 
-              value={((currentRiddleIndex + 1) / gameRiddles.length) * 100}
+            <Progress
+              value={((currentRiddleIndex + 1) / Math.max(1, gameRiddles.length)) * 100}
               className="w-full mt-4"
             />
             <p className="text-sm text-muted-foreground mt-2">
               Question {currentRiddleIndex + 1} of {gameRiddles.length}
             </p>
           </CardHeader>
-          
+
           <CardContent className="space-y-4">
             <div className="text-center bg-secondary/10 rounded-lg p-4">
               <div className="flex items-center justify-between mb-2">
@@ -1011,7 +1071,7 @@ const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
                   onClick={() => handleAnswerSelect(option)}
                   disabled={showFeedback}
                   variant={
-                    showFeedback 
+                    showFeedback
                       ? option === currentRiddle.options[currentRiddle.correctAnswer]
                         ? "default"
                         : option === selectedAnswer
