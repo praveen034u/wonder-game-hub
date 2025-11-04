@@ -15,6 +15,7 @@ interface Player {
   isAI?: boolean;
   status?: 'active' | 'away' | 'disconnected';
   score?: number;
+  totalQuestions?: number;
 }
 
 interface JoinRequest {
@@ -43,12 +44,25 @@ const GameRoomPanel = ({ roomCode, gameId, onPlayerJoin, players: externalPlayer
   const [showJoinRequest, setShowJoinRequest] = useState(false);
   const [currentRequest, setCurrentRequest] = useState<JoinRequest | null>(null);
   const [isExpanded, setIsExpanded] = useState(true);
+  const [playerScores, setPlayerScores] = useState<Record<string, { score: number; totalQuestions: number }>>({});
+  
   const displayedPlayers: Player[] = players.length > 0
     ? players.map((p) => {
         const match = (externalPlayers || []).find(ep => ep.id === p.id);
+        const scoreData = playerScores[p.id];
         return match
-          ? { ...p, name: p.name || match.name, avatar: p.avatar || match.avatar, score: match.score }
-          : p;
+          ? { 
+              ...p, 
+              name: p.name || match.name, 
+              avatar: p.avatar || match.avatar, 
+              score: scoreData?.score ?? match.score ?? 0,
+              totalQuestions: scoreData?.totalQuestions ?? 0
+            }
+          : { 
+              ...p, 
+              score: scoreData?.score ?? 0,
+              totalQuestions: scoreData?.totalQuestions ?? 0
+            };
       })
     : (externalPlayers || []);
 
@@ -89,6 +103,87 @@ const GameRoomPanel = ({ roomCode, gameId, onPlayerJoin, players: externalPlayer
       };
     }
   }, [roomCode, externalPlayers, gameMode]);
+
+  // Subscribe to score updates for multiplayer games
+  useEffect(() => {
+    if (gameMode !== 'multiplayer' || !roomCode) return;
+
+    const loadScores = async () => {
+      try {
+        const { data: room } = await supabase
+          .from('game_rooms')
+          .select('id')
+          .eq('room_code', roomCode)
+          .single();
+
+        if (room) {
+          const { data: scores } = await supabase
+            .from('multiplayer_game_scores')
+            .select('*')
+            .eq('room_id', room.id);
+
+          if (scores) {
+            const scoreMap: Record<string, { score: number; totalQuestions: number }> = {};
+            scores.forEach((s: any) => {
+              // Use child_id as primary key, fall back to player_name for AI players
+              const playerId = s.child_id || s.player_name;
+              scoreMap[playerId] = {
+                score: s.score || 0,
+                totalQuestions: s.total_questions || 0
+              };
+              console.log('Score loaded for player:', playerId, 'Score:', s.score, 'Total questions:', s.total_questions);
+            });
+            setPlayerScores(scoreMap);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading player scores:', error);
+      }
+    };
+
+    loadScores();
+
+    // Subscribe to real-time score updates
+    const loadRoomId = async () => {
+      const { data: room } = await supabase
+        .from('game_rooms')
+        .select('id')
+        .eq('room_code', roomCode)
+        .single();
+
+      if (room) {
+        const scoresChannel = supabase
+          .channel(`multiplayer-scores-${room.id}`)
+          .on('postgres_changes', {
+            event: '*',
+            schema: 'public',
+            table: 'multiplayer_game_scores',
+            filter: `room_id=eq.${room.id}`
+          }, (payload) => {
+            const scoreData: any = payload.new || payload.old;
+            if (scoreData) {
+              // Use child_id as primary key, fall back to player_name for AI players
+              const playerId = scoreData.child_id || scoreData.player_name;
+              console.log('Score updated for player:', playerId, 'Score:', scoreData.score, 'Total questions:', scoreData.total_questions);
+              setPlayerScores(prev => ({
+                ...prev,
+                [playerId]: {
+                  score: scoreData.score || 0,
+                  totalQuestions: scoreData.total_questions || 0
+                }
+              }));
+            }
+          })
+          .subscribe();
+
+        return () => {
+          supabase.removeChannel(scoresChannel);
+        };
+      }
+    };
+
+    loadRoomId();
+  }, [roomCode, gameMode]);
 
   const loadRoomData = async () => {
     if (!roomCode) return;
@@ -344,10 +439,17 @@ const GameRoomPanel = ({ roomCode, gameId, onPlayerJoin, players: externalPlayer
                         <AvatarImage src={player.avatar} />
                         <AvatarFallback className="text-xs">{player.avatar || (player.name ? player.name[0] : '?')}</AvatarFallback>
                       </Avatar>
-                      <div className="flex-1 flex items-center justify-between">
-                        <span className="text-xs font-medium">{player.name}</span>
-                        {typeof player.score === 'number' && (
-                          <span className="text-xs font-bold text-primary">{player.score}</span>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-medium">{player.name}</span>
+                          {typeof player.score === 'number' && (
+                            <span className="text-xs font-bold text-primary">{player.score}</span>
+                          )}
+                        </div>
+                        {typeof player.totalQuestions === 'number' && (
+                          <div className="text-[10px] text-muted-foreground mt-0.5">
+                            {player.totalQuestions} question{player.totalQuestions !== 1 ? 's' : ''} attempted
+                          </div>
                         )}
                       </div>
                       <div className="flex gap-1">
