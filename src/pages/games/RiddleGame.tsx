@@ -1157,3 +1157,5 @@ const RiddleGame = () => {
 };
 
 export default RiddleGame;
+
+//Original code till now without any issue
