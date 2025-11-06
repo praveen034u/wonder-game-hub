@@ -14,11 +14,13 @@ import riddlesData from "@/config/riddles.json";
 import type { Riddle, GameResult } from "@/types";
 import { supabase } from "@/integrations/supabase/client";
 
+// add attempts to Player type so we can show number of questions attempted during play
 type Player = {
   id: string;
   name: string;
   avatar: string;
   score: number;
+  attempts?: number;
   isAI?: boolean;
 };
 
@@ -85,7 +87,7 @@ const RiddleGame = () => {
       // multiplayer mode: load participants from DB
       loadRoomData(param);
     } else {
-      // single player default setup
+      // single player default setup (ensure attempts initialized)
       const playerName = selectedChild?.name || 'Player';
       setSelectedCategory('Zoo Animals');
       const newPlayers: Player[] = [
@@ -93,13 +95,15 @@ const RiddleGame = () => {
           id: selectedChild?.id || 'player1',
           name: playerName,
           avatar: selectedChild?.avatar || '👤',
-          score: 0
+          score: 0,
+          attempts: 0
         },
         {
           id: 'ai1',
           name: 'Vini',
           avatar: '🐵',
           score: 0,
+          attempts: 0,
           isAI: true
         }
       ];
@@ -139,6 +143,7 @@ const RiddleGame = () => {
             name: p.player_name || 'Player',
             avatar: p.player_avatar || '👤',
             score: 0,
+            attempts: 0,
             isAI: !!p.is_ai
           }));
 
@@ -219,7 +224,8 @@ const RiddleGame = () => {
             id: selectedChild.id || 'player1',
             name: selectedChild.name || 'Player',
             avatar: selectedChild.avatar || '👤',
-            score: 0
+            score: 0,
+            attempts: 0
           }]);
           setGamePhase('countdown');
           startCountdown();
@@ -273,6 +279,9 @@ const RiddleGame = () => {
       await supabase
         .from('multiplayer_game_scores')
         .insert(scoreEntries);
+
+      // immediately sync attempts/scores from DB (authoritative)
+      await fetchRoomScores(roomId);
     } catch (error) {
       console.error('Error initializing game scores:', error);
     }
@@ -396,10 +405,8 @@ const RiddleGame = () => {
       const delay = (index + 1) * 1500 + Math.random() * 1000;
       setTimeout(async () => {
         const isCorrect = Math.random() > 0.4; // 60% chance correct
-        if (isCorrect) {
-          // update local score
-          setPlayersSafe(prev => prev.map(p => p.id === aiPlayer.id ? { ...p, score: p.score + 1 } : p));
-        }
+        // Always increment attempts locally when AI "answers"
+        setPlayersSafe(prev => prev.map(p => p.id === aiPlayer.id ? { ...p, score: p.score + (isCorrect ? 1 : 0), attempts: (p.attempts ?? 0) + 1 } : p));
         // Update AI score in database for multiplayer
         if (currentRoomId) {
           await updateAIPlayerScore(aiPlayer.id, isCorrect ? 1 : 0);
@@ -435,9 +442,42 @@ const RiddleGame = () => {
           .eq('is_ai', true)
           .eq('child_id', null)
           .eq('player_name', aiPlayer.name);
+        // sync local players from DB after updating
+        await fetchRoomScores(currentRoomId);
       }
     } catch (error) {
       console.error('Error updating AI player score:', error);
+    }
+  };
+
+  // Fetch latest scores from DB and reconcile into local players state
+  const fetchRoomScores = async (roomId: string | null) => {
+    if (!roomId) return;
+    try {
+      const { data: rows, error, status } = await supabase
+        .from('multiplayer_game_scores')
+        .select('child_id, player_name, player_avatar, is_ai, score, total_questions')
+        .eq('room_id', roomId);
+
+      if (error) {
+        console.error('fetchRoomScores error', error, status);
+        return;
+      }
+      if (!rows) return;
+
+      // Build authoritative player list from DB rows, mapping total_questions -> attempts
+      const nextPlayers: Player[] = rows.map((r: any) => ({
+        id: r.child_id ?? `ai-${r.player_name}`,
+        name: r.player_name,
+        avatar: r.player_avatar ?? '👤',
+        score: typeof r.score === 'number' ? r.score : 0,
+        attempts: typeof r.total_questions === 'number' ? r.total_questions : 0,
+        isAI: !!r.is_ai
+      }));
+
+      setPlayersSafe(nextPlayers);
+    } catch (err) {
+      console.error('fetchRoomScores failed', err);
     }
   };
 
@@ -451,6 +491,7 @@ const RiddleGame = () => {
         name: newPlayer.name,
         avatar: newPlayer.avatar,
         score: 0,
+        attempts: 0,
         isAI: newPlayer.isAI
       });
       setShowNewPlayerDialog(true);
@@ -460,6 +501,7 @@ const RiddleGame = () => {
         name: newPlayer.name,
         avatar: newPlayer.avatar,
         score: 0,
+        attempts: 0,
         isAI: newPlayer.isAI
       }]);
     }
@@ -490,13 +532,15 @@ const RiddleGame = () => {
     const playerId = selectedChild?.id ?? 'player1';
     const scoreIncrement = isCorrect ? 1 : 0; // adjust scoring rule if needed
 
-    // Update local score (only once) and ref immediately
-    setPlayersSafe(prev => prev.map(p => p.id === playerId ? { ...p, score: p.score + scoreIncrement } : p));
+    // Update local score (only once) and ref immediately — also increment attempts locally
+    setPlayersSafe(prev => prev.map(p => p.id === playerId ? { ...p, score: p.score + scoreIncrement, attempts: (p.attempts ?? 0) + 1 } : p));
 
     // Persist score if room-based multiplayer (persist only; local update already applied)
     if (currentRoomId) {
       try {
         await updatePlayerScore(playerId, scoreIncrement);
+        // ensure we refresh after persisting so others see this immediately
+        await fetchRoomScores(currentRoomId);
       } catch (err) {
         console.error('updatePlayerScore failed', err);
       }
@@ -541,6 +585,8 @@ const RiddleGame = () => {
           })
           .eq('room_id', currentRoomId)
           .eq('player_name', player.name);
+        // refresh local copy after update
+        await fetchRoomScores(currentRoomId);
       } else {
         // If row missing, insert a row for this player
         await supabase
@@ -554,6 +600,8 @@ const RiddleGame = () => {
             score: scoreIncrement,
             total_questions: 1
           }]);
+        // and refresh
+        await fetchRoomScores(currentRoomId);
       }
     } catch (err) {
       console.error('Failed to persist player score', err);
@@ -571,8 +619,13 @@ const RiddleGame = () => {
     }
   };
 
-  const finishGame = () => {
+  const finishGame = async () => {
     if (gameEndedRef.current) return; // idempotent
+
+    // attempt to sync final DB scores before snapshotting
+    if (currentRoomId) {
+      try { await fetchRoomScores(currentRoomId); } catch (e) { /* ignore */ }
+    }
 
     // compute and store a final snapshot before switching to complete phase
     const finalPlayers = (playersRef.current && playersRef.current.length) ? playersRef.current : players;
@@ -704,6 +757,25 @@ const RiddleGame = () => {
 
     return () => { supabase.removeChannel(channel); };
   }, [roomCode]);
+
+  // Sync multiplayer scores in realtime so everyone sees updated scores as answers are recorded
+  useEffect(() => {
+    if (!currentRoomId) return;
+
+    const channel = supabase
+      .channel(`multiplayer-scores-${currentRoomId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'multiplayer_game_scores', filter: `room_id=eq.${currentRoomId}` },
+        (payload) => {
+          // whenever a DB change happens, refresh the scores list from DB to keep everyone in sync
+          fetchRoomScores(currentRoomId).catch((e) => { /* ignore */ });
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [currentRoomId]);
 
   // Host explicit start handler: persist 'playing' status and kick off countdown
   const startGameAsHost = async () => {
@@ -972,7 +1044,7 @@ const RiddleGame = () => {
         </Card>
       </div>
 
-      {/* Scoreboard Panel (visible during play: names/avatars shown, scores hidden) */}
+      {/* Scoreboard Panel (visible during play: names/avatars shown, show attempts realtime) */}
       <div className="fixed top-20 right-4 z-50 w-72">
         <Card className="bg-white/95 shadow-lg">
           <CardHeader className="py-2 px-3">
@@ -980,7 +1052,7 @@ const RiddleGame = () => {
           </CardHeader>
           <CardContent className="py-2 px-3">
             <div className="space-y-2 max-h-64 overflow-auto">
-              {[...players].sort((a, b) => b.score - a.score).map((player, idx) => (
+              {[...players].sort((a, b) => (b.attempts ?? 0) - (a.attempts ?? 0)).map((player, idx) => (
                 <div key={player.id} className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
                     <Avatar className="w-6 h-6">
@@ -988,8 +1060,12 @@ const RiddleGame = () => {
                     </Avatar>
                     <span className="text-sm truncate">{idx === 0 ? `👑 ${player.name}` : player.name}</span>
                   </div>
+                  {/* Show live attempts for each player during play */}
+                  <div className="text-sm font-semibold text-primary">
+                    {player.attempts ?? 0} attempted
+                  </div>
                 </div>
-              ))}
+              ))} 
             </div>
           </CardContent>
         </Card>
@@ -1122,5 +1198,3 @@ const RiddleGame = () => {
 };
 
 export default RiddleGame;
-
-//Original code till now without any issue
