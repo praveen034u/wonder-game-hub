@@ -915,32 +915,95 @@ const RiddleGame = () => {
     if (percentage >= 80) starsEarned = 3;
     else if (percentage >= 60) starsEarned = 2;
 
+    // Determine winners/losers
     const sortedPlayers = [...finalPlayers].sort((a, b) => b.score - a.score);
+    const highestScore = sortedPlayers.length ? sortedPlayers[0].score : 0;
+    const lowestScore = sortedPlayers.length ? sortedPlayers[sortedPlayers.length - 1].score : 0;
+    const winners = sortedPlayers.filter(p => p.score === highestScore);
+    const losers = sortedPlayers.filter(p => p.score === lowestScore);
+
+    // friendly feedback for the current player
+    const currentPlayerId = selectedChild?.id || 'player1';
+    const amIWinner = winners.some(w => w.id === currentPlayerId);
+    const amILoser = losers.some(l => l.id === currentPlayerId);
+    let personalFeedback = 'Great effort!';
+    if (amIWinner) {
+      personalFeedback = winners.length === 1 ? 'You are the Winner! 🎉 Excellent work!' : 'You tied for 1st place! 🥳';
+    } else if (amILoser) {
+      personalFeedback = 'Oops — last place this time. Try again to improve! 💪';
+    } else {
+      personalFeedback = 'Nice job — keep practicing to climb to the top!';
+    }
 
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/20 via-secondary/20 to-accent/20 p-4">
         <Card className="max-w-lg mx-auto bg-white/90 shadow-xl">
           <CardHeader className="text-center">
-            <div className="text-6xl mb-4">🎉</div>
-            <CardTitle className="text-2xl font-fredoka text-primary">
-              Great Job, {selectedChild?.name || 'Player'}!
-            </CardTitle>
-          </CardHeader>
+            {amILoser ? (
+              <>
+                <div className="text-6xl mb-4">😢</div>
+                <CardTitle className="text-2xl font-fredoka text-primary">
+                  Better luck next time, {selectedChild?.name || 'Player'}.
+                </CardTitle>
+              </>
+            ) : (
+              <>
+                <div className="text-6xl mb-4">🎉</div>
+                <CardTitle className="text-2xl font-fredoka text-primary">
+                  Great Job, {selectedChild?.name || 'Player'}!
+                </CardTitle>
+              </>
+            )}
+             {/* Personal feedback banner */}
+             <div className="mt-2">
+               <div className={`inline-block px-3 py-1 rounded-full text-sm ${
+                 amIWinner ? 'bg-green-100 text-green-800' : amILoser ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-50 text-blue-800'
+               }`}>
+                 {personalFeedback}
+               </div>
+ 
+               {/* NEW: If player finished last, show a friendly participation badge CTA */}
+               {amILoser && (
+                 <div className="mt-2 flex items-center justify-center space-x-2">
+                   <div className="text-lg">🏅</div>
+                   <div className="text-sm text-yellow-800">
+                     You earned a Participation Badge — keep practicing to level up!
+                   </div>
+                 </div>
+               )}
+             </div>
+           </CardHeader>
           <CardContent className="space-y-6 text-center">
             <div className="space-y-4">
               <p className="text-lg text-muted-foreground">Final Scoreboard:</p>
-              {sortedPlayers.map((player, index) => (
-                <div key={player.id} className="flex items-center justify-between bg-secondary/10 rounded-lg p-3">
-                  <div className="flex items-center space-x-3">
-                    <div className="text-xl">{index === 0 ? '👑' : `${index + 1}.`}</div>
-                    <Avatar className="w-8 h-8">
-                      <AvatarFallback className="text-lg">{player.avatar}</AvatarFallback>
-                    </Avatar>
-                    <span className="font-medium text-primary">{player.name}</span>
+              {sortedPlayers.map((player, index) => {
+                const isWinner = player.score === highestScore;
+                const isLoser = player.score === lowestScore;
+                return (
+                  <div
+                    key={player.id}
+                    className={`flex items-center justify-between rounded-lg p-3 transition-all ${
+                      isWinner ? 'bg-green-50 border-2 border-green-200' : isLoser ? 'bg-red-50 border border-red-100' : 'bg-secondary/10'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-3">
+                      <div className="text-xl">{isWinner ? '👑' : `${index + 1}.`}</div>
+                      <Avatar className="w-8 h-8">
+                        <AvatarFallback className="text-lg">{player.avatar}</AvatarFallback>
+                      </Avatar>
+                      <div className="text-left">
+                        <div className="font-medium text-primary">{player.name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {player.attempts ?? 0} attempted
+                          {isWinner && <span className="ml-2 text-sm text-green-700">Winner</span>}
+                          {isLoser && <span className="ml-2 text-sm text-red-700">Needs practice</span>}
+                        </div>
+                      </div>
+                    </div>
+                    <span className="text-xl font-bold text-primary">{player.score}</span>
                   </div>
-                  <span className="text-xl font-bold text-primary">{player.score}</span>
-                </div>
-              ))}
+                );
+              })}
 
               <div className="flex justify-center mt-4">
                 {Array.from({ length: 3 }, (_, i) => (
