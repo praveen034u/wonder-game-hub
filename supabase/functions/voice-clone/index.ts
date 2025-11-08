@@ -1,10 +1,33 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// Validation schemas
+const auth0UserIdSchema = z.string().min(1).regex(/^auth0\|/, "Invalid Auth0 user ID format");
+const uuidSchema = z.string().uuid("Invalid UUID format");
+const base64Schema = z.string().min(1, "Audio data cannot be empty");
+const fileNameSchema = z.string().min(1).max(255, "File name must be 1-255 characters").optional();
+const storyTextSchema = z.string().min(1).max(10000, "Story text must be 1-10000 characters");
+
+const createVoiceCloneSchema = z.object({
+  action: z.literal('create_voice_clone'),
+  auth0_user_id: auth0UserIdSchema,
+  child_id: uuidSchema,
+  audio_data: base64Schema,
+  file_name: fileNameSchema
+});
+
+const generateStoryAudioSchema = z.object({
+  action: z.literal('generate_story_audio'),
+  auth0_user_id: auth0UserIdSchema,
+  story_text: storyTextSchema,
+  voice_id: z.string().min(1).max(255, "Voice ID required")
+});
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -13,7 +36,8 @@ serve(async (req) => {
   }
 
   try {
-    const { action, auth0_user_id, child_id, audio_data, file_name } = await req.json();
+    const requestBody = await req.json();
+    const { action, auth0_user_id } = requestBody;
 
     if (!auth0_user_id) {
       throw new Error("Auth0 user ID is required");
@@ -31,15 +55,14 @@ serve(async (req) => {
     });
 
     if (action === 'create_voice_clone') {
-      if (!child_id || !audio_data) {
-        throw new Error("Child ID and audio data are required");
-      }
+      const validated = createVoiceCloneSchema.parse(requestBody);
+      const { child_id, audio_data, file_name } = validated;
 
       // Check if user has active subscription
       const { data: parentData } = await supabaseClient
         .from('parent_profiles')
         .select('id')
-        .eq('auth0_user_id', auth0_user_id)
+        .eq('auth0_user_id', validated.auth0_user_id)
         .single();
 
       if (!parentData) {
@@ -62,8 +85,13 @@ serve(async (req) => {
         });
       }
 
-      // Convert base64 audio to binary
-      const audioBuffer = Uint8Array.from(atob(audio_data), c => c.charCodeAt(0));
+      // Validate base64 and convert to binary
+      let audioBuffer: Uint8Array;
+      try {
+        audioBuffer = Uint8Array.from(atob(audio_data), c => c.charCodeAt(0));
+      } catch (e) {
+        throw new Error("Invalid base64 audio data");
+      }
 
       // Create voice clone with ElevenLabs
       const elevenlabsApiKey = Deno.env.get('ELEVENLABS_API_KEY');
@@ -116,11 +144,8 @@ serve(async (req) => {
     }
 
     if (action === 'generate_story_audio') {
-      const { story_text, voice_id } = await req.json();
-
-      if (!story_text || !voice_id) {
-        throw new Error("Story text and voice ID are required");
-      }
+      const validated = generateStoryAudioSchema.parse(requestBody);
+      const { story_text, voice_id } = validated;
 
       const elevenlabsApiKey = Deno.env.get('ELEVENLABS_API_KEY');
       if (!elevenlabsApiKey) {
@@ -171,6 +196,18 @@ serve(async (req) => {
   } catch (error) {
     console.error('Error in voice-clone function:', error);
     const errorMessage = error instanceof Error ? error.message : String(error);
+    
+    // Handle validation errors specifically
+    if (error instanceof z.ZodError) {
+      return new Response(JSON.stringify({ 
+        error: 'Validation failed', 
+        details: error.errors.map(e => ({ path: e.path.join('.'), message: e.message }))
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    
     return new Response(JSON.stringify({ error: errorMessage }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

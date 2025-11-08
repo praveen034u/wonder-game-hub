@@ -128,7 +128,9 @@ export type Database = {
           host_child_id: string
           id: string
           max_players: number
+          player_progress: Json | null
           room_code: string
+          selected_category: string | null
           status: string
           updated_at: string
         }
@@ -143,7 +145,9 @@ export type Database = {
           host_child_id: string
           id?: string
           max_players?: number
+          player_progress?: Json | null
           room_code: string
+          selected_category?: string | null
           status?: string
           updated_at?: string
         }
@@ -158,7 +162,9 @@ export type Database = {
           host_child_id?: string
           id?: string
           max_players?: number
+          player_progress?: Json | null
           room_code?: string
+          selected_category?: string | null
           status?: string
           updated_at?: string
         }
@@ -215,6 +221,7 @@ export type Database = {
           player_avatar: string | null
           player_name: string
           room_code: string
+          room_id: string | null
           status: string
           updated_at: string
         }
@@ -225,6 +232,7 @@ export type Database = {
           player_avatar?: string | null
           player_name: string
           room_code: string
+          room_id?: string | null
           status?: string
           updated_at?: string
         }
@@ -235,10 +243,19 @@ export type Database = {
           player_avatar?: string | null
           player_name?: string
           room_code?: string
+          room_id?: string | null
           status?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "join_requests_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "game_rooms"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       multiplayer_game_scores: {
         Row: {
@@ -349,28 +366,37 @@ export type Database = {
           child_id: string | null
           id: string
           is_ai: boolean
+          is_host: boolean | null
+          is_ready: boolean | null
           joined_at: string
           player_avatar: string | null
           player_name: string
           room_id: string
+          score: number | null
         }
         Insert: {
           child_id?: string | null
           id?: string
           is_ai?: boolean
+          is_host?: boolean | null
+          is_ready?: boolean | null
           joined_at?: string
           player_avatar?: string | null
           player_name: string
           room_id: string
+          score?: number | null
         }
         Update: {
           child_id?: string | null
           id?: string
           is_ai?: boolean
+          is_host?: boolean | null
+          is_ready?: boolean | null
           joined_at?: string
           player_avatar?: string | null
           player_name?: string
           room_id?: string
+          score?: number | null
         }
         Relationships: [
           {
@@ -388,6 +414,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      rooms_rooms: {
+        Row: {
+          created_at: string | null
+          host_child_id: string | null
+          id: string
+          room_code: string
+          selected_category: string | null
+          status: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          host_child_id?: string | null
+          id?: string
+          room_code: string
+          selected_category?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          host_child_id?: string | null
+          id?: string
+          room_code?: string
+          selected_category?: string | null
+          status?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
       }
       voice_subscriptions: {
         Row: {
@@ -435,10 +491,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      set_config: {
-        Args: { setting: string; value: string }
-        Returns: string
-      }
+      set_config: { Args: { setting: string; value: string }; Returns: string }
     }
     Enums: {
       [_ in never]: never
