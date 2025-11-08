@@ -49,6 +49,37 @@ const RiddleGame = () => {
     _setPlayers(resolved);
   };
 
+  // Ensure we render a stable list with unique keys — dedupe by id (or name/avatar fallback)
+  const dedupePlayers = (list: Player[]) => {
+    const seen = new Set<string>();
+    const out: Player[] = [];
+    for (const p of list) {
+      const key = p.id ?? `${p.name}:${p.avatar}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(p);
+    }
+    return out;
+  };
+
+  // Determine which question a player is currently on. Prefer realtime `playerProgress` if available
+  // If `playerProgress` contains a numeric value for the player, treat it as a 0-based current question index
+  // and return a 1-based question number. Otherwise fall back to `player.attempts` (total answered questions).
+  const getPlayerQuestionNumber = (player: Player) => {
+    const progressObj = (playerProgressRef.current && Object.keys(playerProgressRef.current).length) ? playerProgressRef.current : playerProgress;
+    const pid = player.id as string;
+    const raw = progressObj ? (progressObj as any)[pid] : undefined;
+    if (typeof raw === 'number' && !Number.isNaN(raw)) {
+      // assume stored as 0-based index -> show 1-based question number
+      const q = Math.min(gameRiddles.length, Math.max(1, Math.floor(raw) + 1));
+      return q;
+    }
+
+    // fallback: attempts represents how many questions the player has answered
+    const attempts = player.attempts ?? 0;
+    return Math.min(gameRiddles.length, Math.max(0, attempts));
+  };
+
   const [selectedCategory, setSelectedCategory] = useState<string>('Zoo Animals');
   const [gamePhase, setGamePhase] = useState<GamePhase>('theme-select');
   const [waitingForPlayers, setWaitingForPlayers] = useState(false);
@@ -190,7 +221,7 @@ const RiddleGame = () => {
             // Subscribe to participant changes to keep the player list in sync (but DO NOT auto-start)
             const channel = supabase
               .channel(`riddle-room-participants-${roomData.id}`)
-              .on('postgres_changes', { event: '*', schema: 'public', table: 'room_participants', filter: `room_id=eq.${roomData.id}` }, (payload) => {
+              .on('postgres_changes', { event: '*', schema: 'public', table: 'room_participants', filter: `room_id=eq.${roomData.id}` }, async (payload) => {
                 const rec: any = payload.new || payload.old;
                 if (!rec) return;
                 const newPlayer: Player = {
@@ -204,10 +235,13 @@ const RiddleGame = () => {
                   const exists = prev.some(p => p.id === newPlayer.id);
                   if (exists) return prev.map(p => p.id === newPlayer.id ? { ...p, ...newPlayer } : p);
                   const next = [...prev, newPlayer];
-                  // when enough players arrive, clear waiting but do not auto-start
-                  if (next.some(p => p.isAI) || next.length >= 2) {
-                    setWaitingForPlayers(false);
+                  playersRef.current = next;
+                  
+                  // Initialize score entry for the new player
+                  if (!exists && payload.eventType === 'INSERT') {
+                    initializeGameScores(roomData.id, next).catch((e) => console.error('Error initializing game scores for new player:', e));
                   }
+                  
                   return next;
                 });
               })
@@ -221,9 +255,53 @@ const RiddleGame = () => {
             };
             (window as any).__riddle_room_cleanup = unsubscribe;
           } else {
-            // Wait for additional players to join
+            // Wait for additional players to join - set up subscription to detect when they arrive
             setWaitingForPlayers(true);
-            setGamePhase('theme-select');
+            
+            // Subscribe to participant changes even while waiting
+            const channel = supabase
+              .channel(`riddle-room-participants-waiting-${roomData.id}`)
+              .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'room_participants', filter: `room_id=eq.${roomData.id}` }, async (payload) => {
+                const rec: any = payload.new;
+                if (!rec) return;
+                console.log('New player joined:', rec);
+                const newPlayer: Player = {
+                  id: rec.child_id || rec.id,
+                  name: rec.player_name,
+                  avatar: rec.player_avatar || '👤',
+                  score: 0,
+                  isAI: rec.is_ai
+                };
+                
+                let updatedPlayers: Player[] = [];
+                setPlayersSafe(prev => {
+                  const exists = prev.some(p => p.id === newPlayer.id);
+                  if (exists) return prev;
+                  const next = [...prev, newPlayer];
+                  playersRef.current = next;
+                  updatedPlayers = next;
+                  
+                  console.log('Updated players count:', next.length, 'Human players:', next.filter(p => !p.isAI).length);
+                  
+                  // when second player arrives, we can move forward
+                  if (next.length >= 2) {
+                    console.log('Enabling theme selection');
+                    setWaitingForPlayers(false);
+                    setGamePhase('theme-select');
+                  }
+                  return next;
+                });
+                
+                // Initialize score entry for the new player
+                if (updatedPlayers.length > 0) {
+                  await initializeGameScores(roomData.id, updatedPlayers).catch((e) => console.error('Error initializing game scores for new player:', e));
+                }
+              })
+              .subscribe();
+
+            // cleanup subscription
+            const unsubscribe = () => supabase.removeChannel(channel);
+            (window as any).__riddle_room_cleanup = unsubscribe;
           }
 
           // Initialize scores in database in background
@@ -271,12 +349,27 @@ const RiddleGame = () => {
 
   const initializeGameScores = async (roomId: string, playerList: Player[]) => {
     try {
-      // Clear existing scores for this room
-      await supabase
+      // Get existing score entries
+      const { data: existingScores } = await supabase
         .from('multiplayer_game_scores')
-        .delete()
+        .select('child_id, player_name')
         .eq('room_id', roomId);
-
+      
+      const existingIds = new Set(existingScores?.map(s => s.child_id || s.player_name) || []);
+      
+      // Only insert scores for players that don't already have entries
+      const newScoreEntries = playerList
+        .filter(player => !existingIds.has(player.id) && !existingIds.has(player.name))
+        .map(player => ({
+          room_id: roomId,
+          child_id: player.isAI ? null : player.id,
+          player_name: player.name,
+          player_avatar: player.avatar,
+          is_ai: player.isAI || false,
+          score: 0,
+          total_questions: 0
+        }));
+      
       // Insert initial scores for all players
       const scoreEntries = playerList.map(player => ({
         room_id: roomId,
@@ -627,21 +720,16 @@ const RiddleGame = () => {
     }, 2000);
   };
 
+  // Persist a human player's score to DB
   const updatePlayerScore = async (playerId: string, scoreIncrement: number) => {
-    // Persist only; local state should be updated by caller via setPlayersSafe
     if (!currentRoomId) return;
     try {
-      // Find the player's DB row
-      const player = playersRef.current.find(p => p.id === playerId);
-      if (!player) return;
-
-      // Attempt to get existing row
       const { data: currentScore } = await supabase
         .from('multiplayer_game_scores')
         .select('score, total_questions')
         .eq('room_id', currentRoomId)
-        .eq('player_name', player.name)
-        .maybeSingle();
+        .eq('child_id', playerId)
+        .single();
 
       if (currentScore) {
         await supabase
@@ -651,19 +739,20 @@ const RiddleGame = () => {
             total_questions: currentScore.total_questions + 1
           })
           .eq('room_id', currentRoomId)
-          .eq('player_name', player.name);
+          .eq('child_id', playerId);
+
         // refresh local copy after update
         await fetchRoomScores(currentRoomId);
       } else {
-        // If row missing, insert a row for this player
+        // If row missing, insert a row for this player (use selectedChild as source for name/avatar)
         await supabase
           .from('multiplayer_game_scores')
           .insert([{
             room_id: currentRoomId,
-            child_id: player.isAI ? null : playerId,
-            player_name: player.name,
-            player_avatar: player.avatar,
-            is_ai: player.isAI || false,
+            child_id: playerId,
+            player_name: selectedChild?.name || 'Player',
+            player_avatar: selectedChild?.avatar || '👤',
+            is_ai: false,
             score: scoreIncrement,
             total_questions: 1
           }]);
@@ -695,7 +784,7 @@ const RiddleGame = () => {
     }
 
     // compute and store a final snapshot before switching to complete phase
-    const finalPlayers = (playersRef.current && playersRef.current.length) ? playersRef.current : players;
+  const finalPlayers = dedupePlayers((playersRef.current && playersRef.current.length) ? playersRef.current : players);
     const playerScore = finalPlayers.find(p => p.id === (selectedChild?.id || 'player1'))?.score ?? 0;
 
     // store snapshot into state so UI reads this stable copy
@@ -1043,7 +1132,7 @@ const RiddleGame = () => {
 
   // Game Complete Phase — render using the stable snapshot (finalPlayersSnapshot)
   if (gamePhase === 'complete') {
-    const finalPlayers = finalPlayersSnapshot ?? (playersRef.current.length ? playersRef.current : players);
+  const finalPlayers = dedupePlayers(finalPlayersSnapshot ?? (playersRef.current.length ? playersRef.current : players));
     const playerScore = finalPlayerScore ?? finalPlayers.find(p => p.id === (selectedChild?.id || 'player1'))?.score ?? 0;
     const totalQuestions = Math.max(1, currentRiddleIndex + 1);
     const percentage = (playerScore / totalQuestions) * 100;
@@ -1267,32 +1356,35 @@ const RiddleGame = () => {
           </CardHeader>
           <CardContent className="py-2 px-3">
             <div className="space-y-2 max-h-64 overflow-auto">
-              {[...players].sort((a, b) => (b.attempts ?? 0) - (a.attempts ?? 0)).map((player, idx) => (
-                <div key={player.id} className="flex items-center justify-between player-row">
-                  <div className="flex items-center space-x-2">
-                    <Avatar className="w-6 h-6">
-                      <AvatarFallback className="text-sm">{player.avatar}</AvatarFallback>
-                    </Avatar>
-                    <div className="flex items-center">
-                      <span className="text-sm truncate">{idx === 0 ? `👑 ${player.name}` : player.name}</span>
-                      {/* NEW: streak on scoreboard */}
-                      {player.streak ? <span className="streak-badge ml-2">🔥 {player.streak}</span> : null}
+              {dedupePlayers(players)
+                .sort((a, b) => (b.attempts ?? 0) - (a.attempts ?? 0))
+                .map((player, idx) => {
+                  const displayedAttempts = getPlayerQuestionNumber(player);
+                  return (
+                    <div key={player.id} className="flex items-center justify-between player-row">
+                      <div className="flex items-center space-x-2">
+                        <Avatar className="w-6 h-6">
+                          <AvatarFallback className="text-sm">{player.avatar}</AvatarFallback>
+                        </Avatar>
+                        <div className="flex flex-col">
+                          <div className="text-sm truncate">{idx === 0 ? `👑 ${player.name}` : player.name}</div>
+                          {player.streak ? <div className="streak-badge mt-1">🔥 {player.streak}</div> : null}
+                        </div>
+                      </div>
+
+                      {/* Visualize current question for the player as a small progress bar (questionNumber / total questions) */}
+                      <div className="flex flex-col items-end">
+                        <div className="w-24">
+                          <Progress
+                            value={(displayedAttempts / Math.max(1, gameRiddles.length)) * 100}
+                            className="h-2 rounded-full"
+                          />
+                        </div>
+                        <div className="mt-1 text-xs text-muted-foreground">Q {displayedAttempts}/{Math.max(1, gameRiddles.length)}</div>
+                      </div>
                     </div>
-                  </div>
-                  {/* Visualize attempts as a small progress bar (attempts / total questions) */}
-                  <div className="flex flex-col items-end">
-                    <div className="w-24">
-                      <Progress
-                        value={Math.min(100, ((player.attempts ?? 0) / Math.max(1, gameRiddles.length)) * 100)}
-                        className="h-2 rounded-full"
-                      />
-                    </div>
-                    <div className="text-xs font-semibold text-primary mt-1">
-                      {player.attempts ?? 0}/{Math.max(1, gameRiddles.length)}
-                    </div>
-                  </div>
-                </div>
-              ))} 
+                  );
+                })}
             </div>
           </CardContent>
         </Card>
@@ -1330,7 +1422,7 @@ const RiddleGame = () => {
           roomCode={roomCode}
           gameId={gameId || 'riddle'}
           onPlayerJoin={handlePlayerJoin}
-          players={players}
+          players={dedupePlayers(players)}
           gameMode={roomCode ? 'multiplayer' : 'single'}
           onJoinRequestUpdate={handleJoinRequestUpdate}
         />
