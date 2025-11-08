@@ -22,6 +22,7 @@ type Player = {
   score: number;
   attempts?: number;
   isAI?: boolean;
+  streak?: number; // NEW
 };
 
 type GamePhase = 'theme-select' | 'setup' | 'countdown' | 'playing' | 'scoreboard' | 'complete';
@@ -78,6 +79,14 @@ const RiddleGame = () => {
   const [showFeedback, setShowFeedback] = useState(false);
   const [countdown, setCountdown] = useState(3);
 
+  // NEW: transient feedback banner for answers
+  const [feedbackBanner, setFeedbackBanner] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const feedbackTimerRef = useRef<number | null>(null);
+
+  // NEW: confetti toggle state
+  const [showConfetti, setShowConfetti] = useState(false);
+  const confettiTimerRef = useRef<number | null>(null);
+
   // Initialize room or single-player when params or selectedChild change
   useEffect(() => {
     const param = searchParams.get('room')?.toUpperCase() || null;
@@ -96,7 +105,8 @@ const RiddleGame = () => {
           name: playerName,
           avatar: selectedChild?.avatar || '👤',
           score: 0,
-          attempts: 0
+          attempts: 0,
+          streak: 0 // NEW
         },
         {
           id: 'ai1',
@@ -104,7 +114,8 @@ const RiddleGame = () => {
           avatar: '🐵',
           score: 0,
           attempts: 0,
-          isAI: true
+          isAI: true,
+          streak: 0 // NEW
         }
       ];
       setPlayersSafe(newPlayers);
@@ -144,7 +155,8 @@ const RiddleGame = () => {
             avatar: p.player_avatar || '👤',
             score: 0,
             attempts: 0,
-            isAI: !!p.is_ai
+            isAI: !!p.is_ai,
+            streak: 0 // NEW
           }));
 
           setPlayersSafe(playerList);
@@ -405,8 +417,12 @@ const RiddleGame = () => {
       const delay = (index + 1) * 1500 + Math.random() * 1000;
       setTimeout(async () => {
         const isCorrect = Math.random() > 0.4; // 60% chance correct
-        // Always increment attempts locally when AI "answers"
-        setPlayersSafe(prev => prev.map(p => p.id === aiPlayer.id ? { ...p, score: p.score + (isCorrect ? 1 : 0), attempts: (p.attempts ?? 0) + 1 } : p));
+        // Update AI streak/score/attempts locally
+        setPlayersSafe(prev => prev.map(p => {
+          if (p.id !== aiPlayer.id) return p;
+          const newStreak = isCorrect ? (p.streak ?? 0) + 1 : 0;
+          return { ...p, score: p.score + (isCorrect ? 1 : 0), attempts: (p.attempts ?? 0) + 1, streak: newStreak };
+        }));
         // Update AI score in database for multiplayer
         if (currentRoomId) {
           await updateAIPlayerScore(aiPlayer.id, isCorrect ? 1 : 0);
@@ -472,7 +488,8 @@ const RiddleGame = () => {
         avatar: r.player_avatar ?? '👤',
         score: typeof r.score === 'number' ? r.score : 0,
         attempts: typeof r.total_questions === 'number' ? r.total_questions : 0,
-        isAI: !!r.is_ai
+        isAI: !!r.is_ai,
+        streak: 0 // DB doesn't track streaks — start at 0 on sync
       }));
 
       setPlayersSafe(nextPlayers);
@@ -518,6 +535,40 @@ const RiddleGame = () => {
     setNewPlayerInfo(null);
   };
 
+  // KEYBOARD SHORTCUTS: A/B/C/D or 1-4 to select options
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (gamePhase !== 'playing' || showFeedback || !currentRiddle) return;
+      const key = e.key.toLowerCase();
+      let idx: number | null = null;
+      if (key >= '1' && key <= '4') idx = parseInt(key, 10) - 1;
+      if (key >= 'a' && key <= 'd') idx = key.charCodeAt(0) - 'a'.charCodeAt(0);
+      if (idx !== null && currentRiddle.options[idx]) {
+        e.preventDefault();
+        handleAnswerSelect(currentRiddle.options[idx]);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gamePhase, showFeedback, currentRiddle]);
+
+  const clearFeedback = () => {
+    if (feedbackTimerRef.current) { try { window.clearTimeout(feedbackTimerRef.current); } catch(_){} feedbackTimerRef.current = null; }
+    setFeedbackBanner(null);
+  };
+  const showTemporaryFeedback = (message: string, type: 'success'|'error'|'info' = 'info') => {
+    clearFeedback();
+    setFeedbackBanner({ message, type });
+    feedbackTimerRef.current = window.setTimeout(() => setFeedbackBanner(null), 1600);
+  };
+
+  const triggerConfetti = () => {
+    if (confettiTimerRef.current) { try { window.clearTimeout(confettiTimerRef.current); } catch(_){} confettiTimerRef.current = null; }
+    setShowConfetti(true);
+    confettiTimerRef.current = window.setTimeout(() => setShowConfetti(false), 1400);
+  };
+
   const handleAnswerSelect = async (answer: string) => {
     if (showFeedback || gameEndedRef.current) return;
     if (!currentRiddle) return;
@@ -530,23 +581,40 @@ const RiddleGame = () => {
     const isCorrect = answer === correctText;
 
     const playerId = selectedChild?.id ?? 'player1';
-    const scoreIncrement = isCorrect ? 1 : 0; // adjust scoring rule if needed
+    const baseIncrement = isCorrect ? 1 : 0;
 
-    // Update local score (only once) and ref immediately — also increment attempts locally
-    setPlayersSafe(prev => prev.map(p => p.id === playerId ? { ...p, score: p.score + scoreIncrement, attempts: (p.attempts ?? 0) + 1 } : p));
+    // compute streak locally & update players
+    setPlayersSafe(prev => prev.map(p => {
+      if (p.id !== playerId) return p;
+      const prevStreak = p.streak ?? 0;
+      const newStreak = isCorrect ? prevStreak + 1 : 0;
+      return {
+        ...p,
+        score: p.score + baseIncrement,
+        attempts: (p.attempts ?? 0) + 1,
+        streak: newStreak
+      };
+    }));
 
-    // Persist score if room-based multiplayer (persist only; local update already applied)
+    // Feedback & confetti
+    if (isCorrect) {
+      showTemporaryFeedback(`Correct! 🔥 Streak +1`, 'success');
+      triggerConfetti();
+    } else {
+      showTemporaryFeedback(`Oops — that's incorrect. 😕`, 'error');
+    }
+
+    // Persist base score if multiplayer
     if (currentRoomId) {
       try {
-        await updatePlayerScore(playerId, scoreIncrement);
-        // ensure we refresh after persisting so others see this immediately
+        await updatePlayerScore(playerId, baseIncrement);
         await fetchRoomScores(currentRoomId);
       } catch (err) {
         console.error('updatePlayerScore failed', err);
       }
     }
 
-    // simulate AI answers (unchanged)
+    // simulate AI answers (unchanged but AI now updates streak)
     simulateAIAnswers();
 
     // store feedback timeout so finishGame can clear it
@@ -554,7 +622,6 @@ const RiddleGame = () => {
     feedbackTimeoutRef.current = window.setTimeout(() => {
       setShowFeedback(false);
       setSelectedAnswer(null);
-      // advance question only if game not ended
       if (!gameEndedRef.current) nextQuestion();
       feedbackTimeoutRef.current = null;
     }, 2000);
@@ -809,11 +876,80 @@ const RiddleGame = () => {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // NEW: decorative 3D background component (uses inline <style> so no extra files are required)
+  const Background3D = () => (
+    <>
+      <div className="riddle-3d-bg" aria-hidden>
+        <div className="riddle-layer layer1" />
+        <div className="riddle-layer layer2" />
+        <div className="riddle-layer layer3" />
+        <div className="riddle-shape shape1" />
+        <div className="riddle-shape shape2" />
+      </div>
+      <style>{`
+        .riddle-3d-bg { position: fixed; inset: 0; z-index: -20; perspective: 1000px; pointer-events: none; overflow: hidden; }
+        .riddle-layer { position: absolute; width: 140%; height: 140%; left: -20%; top: -20%; transform-origin: center; filter: blur(60px) saturate(120%); opacity: 0.75; }
+        .riddle-layer.layer1 { background: radial-gradient(circle at 20% 20%, rgba(99,102,241,0.38), transparent 40%), radial-gradient(circle at 80% 80%, rgba(236,72,153,0.26), transparent 30%); animation: float 20s linear infinite; transform: translateZ(-200px) scale(1.2) rotateX(18deg); }
+        .riddle-layer.layer2 { background: radial-gradient(circle at 50% 10%, rgba(34,197,94,0.2), transparent 30%), radial-gradient(circle at 10% 80%, rgba(59,130,246,0.18), transparent 30%); animation: float 28s linear infinite reverse; transform: translateZ(-100px) scale(1.05) rotateX(12deg); }
+        .riddle-layer.layer3 { background: linear-gradient(120deg, rgba(245,158,11,0.05), rgba(236,72,153,0.04)); transform: translateZ(0) scale(1); opacity: 0.6; animation: float 35s linear infinite; }
+        .riddle-shape { position: absolute; border-radius: 24px; mix-blend-mode: screen; filter: blur(20px); opacity: 0.95; transform-origin: center; animation: spin 20s linear infinite; }
+        .riddle-shape.shape1 { width: 320px; height: 320px; left: 6%; top: 8%; background: linear-gradient(135deg, rgba(99,102,241,0.22), rgba(59,130,246,0.10)); transform: translateZ(180px) rotateY(22deg) rotateX(8deg); }
+        .riddle-shape.shape2 { width: 420px; height: 420px; right: 6%; bottom: 4%; background: linear-gradient(135deg, rgba(236,72,153,0.20), rgba(245,158,11,0.06)); transform: translateZ(120px) rotateY(-18deg) rotateX(6deg); animation-duration: 26s; }
+        @keyframes float { 0% { transform: translateY(0) } 50% { transform: translateY(-28px) } 100% { transform: translateY(0) } }
+        @keyframes spin { 0% { transform: rotateY(0deg) rotateX(0deg) } 100% { transform: rotateY(360deg) rotateX(20deg) } }
+        /* keep small shapes subtle on small screens */
+        @media (max-width: 640px) {
+          .riddle-shape.shape1, .riddle-shape.shape2 { display: none; }
+          .riddle-layer { filter: blur(40px); }
+        }
+
+        /* UI enhancements */
+        .ui-card { border-radius: 14px; box-shadow: 0 8px 30px rgba(2,6,23,0.12); }
+        .answer-btn { transition: transform .16s ease, box-shadow .16s ease; border-radius: 10px; }
+        .answer-btn:hover { transform: translateY(-4px) scale(1.02); box-shadow: 0 8px 20px rgba(2,6,23,0.08); }
+        .answer-btn:active { transform: translateY(-2px) scale(0.998); }
+        .answer-selected { box-shadow: 0 10px 30px rgba(34,197,94,0.14) !important; transform: translateY(-2px) !important; }
+        .streak-badge { display:inline-flex; align-items:center; gap:6px; background: linear-gradient(90deg,#FFEDD5,#FFF7ED); color:#B45309; padding:2px 8px; border-radius:999px; font-weight:600; font-size:12px; margin-left:8px; box-shadow: 0 4px 10px rgba(11,15,30,0.06); }
+        .keyboard-hint { font-size:12px; color:rgba(17,24,39,0.65); background:rgba(255,255,255,0.6); padding:6px 10px; border-radius:999px; display:inline-block; margin-top:8px; }
+        .player-row:hover { transform: translateY(-4px); transition: transform .18s ease; box-shadow:0 10px 30px rgba(2,6,23,0.06); }
+      `}</style>
+    </>
+  );
+
+  // NEW: Confetti visual (very lightweight CSS-only)
+  const Confetti = () => (
+    <>
+      {showConfetti && (
+        <div className="confetti-wrapper" aria-hidden>
+          {Array.from({ length: 18 }).map((_, i) => (
+            <span key={i} className={`confetti confetti-${i%6}`} />
+          ))}
+        </div>
+      )}
+      <style>{`
+        .confetti-wrapper { position: fixed; left:0; right:0; top:20%; pointer-events: none; z-index: 60; display:flex; justify-content:center; gap:6px; }
+        .confetti { width:8px; height:14px; display:inline-block; transform-origin:center; opacity:0.95; animation: confetti-fall 1000ms linear forwards; border-radius:2px; }
+        .confetti-0 { background:#FDE047; animation-delay:0ms; }
+        .confetti-1 { background:#F87171; animation-delay:30ms; }
+        .confetti-2 { background:#60A5FA; animation-delay:60ms; }
+        .confetti-3 { background:#34D399; animation-delay:90ms; }
+        .confetti-4 { background:#A78BFA; animation-delay:120ms; }
+        .confetti-5 { background:#FB7185; animation-delay:150ms; }
+        @keyframes confetti-fall {
+          0% { transform: translateY(-10px) rotate(0deg) scale(1); opacity:1; }
+          60% { transform: translateY(40px) rotate(120deg) scale(1.1); opacity:1; }
+          100% { transform: translateY(140px) rotate(240deg) scale(0.95); opacity:0; }
+        }
+      `}</style>
+    </>
+  );
+
   // Theme Selection Phase
   if (gamePhase === 'theme-select') {
     const availableThemes = Object.keys(riddlesData as any);
     return (
       <div className="min-h-screen bg-gradient-to-br from-primary/20 to-secondary/20">
+        <Background3D /> {/* <-- added */}
         <AppHeader title="Select Theme" showBackButton />
         <div className="container mx-auto px-4 py-6">
           <Card className="max-w-2xl mx-auto">
@@ -884,6 +1020,7 @@ const RiddleGame = () => {
   if (gamePhase === 'countdown') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-primary/20 via-secondary/20 to-accent/20 p-4 flex items-center justify-center">
+        <Background3D /> {/* <-- added */}
         <Card className="max-w-md mx-auto bg-white/90 shadow-xl">
           <CardContent className="text-center py-16">
             <h2 className="text-2xl font-fredoka text-primary mb-4">
@@ -937,6 +1074,7 @@ const RiddleGame = () => {
 
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/20 via-secondary/20 to-accent/20 p-4">
+        <Background3D /> {/* <-- added */}
         <Card className="max-w-lg mx-auto bg-white/90 shadow-xl">
           <CardHeader className="text-center">
             {amILoser ? (
@@ -992,11 +1130,23 @@ const RiddleGame = () => {
                         <AvatarFallback className="text-lg">{player.avatar}</AvatarFallback>
                       </Avatar>
                       <div className="text-left">
-                        <div className="font-medium text-primary">{player.name}</div>
+                        <div className="font-medium text-primary">
+                          {player.name}
+                          {/* NEW: show streak if present */}
+                          {player.streak ? <span className="streak-badge">🔥 {player.streak}</span> : null}
+                        </div>
                         <div className="text-xs text-muted-foreground">
-                          {player.attempts ?? 0} attempted
-                          {isWinner && <span className="ml-2 text-sm text-green-700">Winner</span>}
-                          {isLoser && <span className="ml-2 text-sm text-red-700">Needs practice</span>}
+                          <div className="w-40">
+                            <Progress
+                              value={Math.min(100, ((player.attempts ?? 0) / Math.max(1, gameRiddles.length)) * 100)}
+                              className="h-2 rounded-full"
+                            />
+                          </div>
+                          <div className="mt-1">
+                            <span className="text-xs">{player.attempts ?? 0}/{Math.max(1, gameRiddles.length)}</span>
+                            {isWinner && <span className="ml-2 text-sm text-green-700">Winner</span>}
+                            {isLoser && <span className="ml-2 text-sm text-red-700">Needs practice</span>}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1048,6 +1198,7 @@ const RiddleGame = () => {
   if (!currentRiddle) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-pink-500 to-purple-600">
+        <Background3D /> {/* <-- added */}
         <Card className="max-w-md mx-auto bg-pink-100/90">
           <CardContent className="text-center py-8">
             <p className="text-lg text-pink-700">No riddles available for {selectedCategory} - {difficulty}.</p>
@@ -1063,6 +1214,7 @@ const RiddleGame = () => {
   // Playing Phase
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/20 via-secondary/20 to-accent/20 p-4">
+      <Background3D /> {/* <-- added */}
       {/* Join Request Notification Banner */}
       {isRoomCreator && pendingJoinRequests > 0 && (
         <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50">
@@ -1116,16 +1268,28 @@ const RiddleGame = () => {
           <CardContent className="py-2 px-3">
             <div className="space-y-2 max-h-64 overflow-auto">
               {[...players].sort((a, b) => (b.attempts ?? 0) - (a.attempts ?? 0)).map((player, idx) => (
-                <div key={player.id} className="flex items-center justify-between">
+                <div key={player.id} className="flex items-center justify-between player-row">
                   <div className="flex items-center space-x-2">
                     <Avatar className="w-6 h-6">
                       <AvatarFallback className="text-sm">{player.avatar}</AvatarFallback>
                     </Avatar>
-                    <span className="text-sm truncate">{idx === 0 ? `👑 ${player.name}` : player.name}</span>
+                    <div className="flex items-center">
+                      <span className="text-sm truncate">{idx === 0 ? `👑 ${player.name}` : player.name}</span>
+                      {/* NEW: streak on scoreboard */}
+                      {player.streak ? <span className="streak-badge ml-2">🔥 {player.streak}</span> : null}
+                    </div>
                   </div>
-                  {/* Show live attempts for each player during play */}
-                  <div className="text-sm font-semibold text-primary">
-                    {player.attempts ?? 0} attempted
+                  {/* Visualize attempts as a small progress bar (attempts / total questions) */}
+                  <div className="flex flex-col items-end">
+                    <div className="w-24">
+                      <Progress
+                        value={Math.min(100, ((player.attempts ?? 0) / Math.max(1, gameRiddles.length)) * 100)}
+                        className="h-2 rounded-full"
+                      />
+                    </div>
+                    <div className="text-xs font-semibold text-primary mt-1">
+                      {player.attempts ?? 0}/{Math.max(1, gameRiddles.length)}
+                    </div>
                   </div>
                 </div>
               ))} 
@@ -1201,6 +1365,12 @@ const RiddleGame = () => {
               <h3 className="text-lg font-medium text-primary mb-3">
                 {currentRiddle.question}
               </h3>
+
+              {/* Keyboard hint for power users */}
+              <div className="flex justify-center">
+                <div className="keyboard-hint">Press A/B/C/D or 1-4 to answer</div>
+              </div>
+              
             </div>
 
             <div className="space-y-3">
@@ -1218,7 +1388,7 @@ const RiddleGame = () => {
                           : "outline"
                       : "outline"
                   }
-                  className={`w-full text-left justify-start p-4 h-auto ${
+                  className={`answer-btn w-full text-left justify-start p-4 h-auto ${
                     showFeedback && option === currentRiddle.options[currentRiddle.correctAnswer]
                       ? "bg-green-500 hover:bg-green-500 text-white border-green-500"
                       : showFeedback && option === selectedAnswer && option !== currentRiddle.options[currentRiddle.correctAnswer]
@@ -1256,6 +1426,9 @@ const RiddleGame = () => {
           </CardContent>
         </Card>
       </div>
+
+      {feedbackBanner && <div className={`fixed top-28 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-md ${feedbackBanner.type === 'success' ? 'bg-green-100 text-green-800' : feedbackBanner.type === 'error' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}`}>{feedbackBanner.message}</div>}
+      <Confetti />
     </div>
   );
 };
