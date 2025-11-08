@@ -14,11 +14,13 @@ import riddlesData from "@/config/riddles.json";
 import type { Riddle, GameResult } from "@/types";
 import { supabase } from "@/integrations/supabase/client";
 
+// add attempts to Player type so we can show number of questions attempted during play
 type Player = {
   id: string;
   name: string;
   avatar: string;
   score: number;
+  attempts?: number;
   isAI?: boolean;
 };
 
@@ -85,7 +87,7 @@ const RiddleGame = () => {
       // multiplayer mode: load participants from DB
       loadRoomData(param);
     } else {
-      // single player default setup
+      // single player default setup (ensure attempts initialized)
       const playerName = selectedChild?.name || 'Player';
       setSelectedCategory('Zoo Animals');
       const newPlayers: Player[] = [
@@ -93,13 +95,15 @@ const RiddleGame = () => {
           id: selectedChild?.id || 'player1',
           name: playerName,
           avatar: selectedChild?.avatar || '👤',
-          score: 0
+          score: 0,
+          attempts: 0
         },
         {
           id: 'ai1',
           name: 'Vini',
           avatar: '🐵',
           score: 0,
+          attempts: 0,
           isAI: true
         }
       ];
@@ -139,6 +143,7 @@ const RiddleGame = () => {
             name: p.player_name || 'Player',
             avatar: p.player_avatar || '👤',
             score: 0,
+            attempts: 0,
             isAI: !!p.is_ai
           }));
 
@@ -266,7 +271,8 @@ const RiddleGame = () => {
             id: selectedChild.id || 'player1',
             name: selectedChild.name || 'Player',
             avatar: selectedChild.avatar || '👤',
-            score: 0
+            score: 0,
+            attempts: 0
           }]);
           setGamePhase('countdown');
           startCountdown();
@@ -320,13 +326,24 @@ const RiddleGame = () => {
           score: 0,
           total_questions: 0
         }));
+      
+      // Insert initial scores for all players
+      const scoreEntries = playerList.map(player => ({
+        room_id: roomId,
+        child_id: player.isAI ? null : player.id,
+        player_name: player.name,
+        player_avatar: player.avatar,
+        is_ai: player.isAI || false,
+        score: 0,
+        total_questions: 0
+      }));
 
-      if (newScoreEntries.length > 0) {
-        await supabase
-          .from('multiplayer_game_scores')
-          .insert(newScoreEntries);
-        console.log('Initialized scores for new players:', newScoreEntries.map(e => e.player_name));
-      }
+      await supabase
+        .from('multiplayer_game_scores')
+        .insert(scoreEntries);
+
+      // immediately sync attempts/scores from DB (authoritative)
+      await fetchRoomScores(roomId);
     } catch (error) {
       console.error('Error initializing game scores:', error);
     }
@@ -450,10 +467,8 @@ const RiddleGame = () => {
       const delay = (index + 1) * 1500 + Math.random() * 1000;
       setTimeout(async () => {
         const isCorrect = Math.random() > 0.4; // 60% chance correct
-        if (isCorrect) {
-          // update local score
-          setPlayersSafe(prev => prev.map(p => p.id === aiPlayer.id ? { ...p, score: p.score + 1 } : p));
-        }
+        // Always increment attempts locally when AI "answers"
+        setPlayersSafe(prev => prev.map(p => p.id === aiPlayer.id ? { ...p, score: p.score + (isCorrect ? 1 : 0), attempts: (p.attempts ?? 0) + 1 } : p));
         // Update AI score in database for multiplayer
         if (currentRoomId) {
           await updateAIPlayerScore(aiPlayer.id, isCorrect ? 1 : 0);
@@ -489,9 +504,42 @@ const RiddleGame = () => {
           .eq('is_ai', true)
           .eq('child_id', null)
           .eq('player_name', aiPlayer.name);
+        // sync local players from DB after updating
+        await fetchRoomScores(currentRoomId);
       }
     } catch (error) {
       console.error('Error updating AI player score:', error);
+    }
+  };
+
+  // Fetch latest scores from DB and reconcile into local players state
+  const fetchRoomScores = async (roomId: string | null) => {
+    if (!roomId) return;
+    try {
+      const { data: rows, error, status } = await supabase
+        .from('multiplayer_game_scores')
+        .select('child_id, player_name, player_avatar, is_ai, score, total_questions')
+        .eq('room_id', roomId);
+
+      if (error) {
+        console.error('fetchRoomScores error', error, status);
+        return;
+      }
+      if (!rows) return;
+
+      // Build authoritative player list from DB rows, mapping total_questions -> attempts
+      const nextPlayers: Player[] = rows.map((r: any) => ({
+        id: r.child_id ?? `ai-${r.player_name}`,
+        name: r.player_name,
+        avatar: r.player_avatar ?? '👤',
+        score: typeof r.score === 'number' ? r.score : 0,
+        attempts: typeof r.total_questions === 'number' ? r.total_questions : 0,
+        isAI: !!r.is_ai
+      }));
+
+      setPlayersSafe(nextPlayers);
+    } catch (err) {
+      console.error('fetchRoomScores failed', err);
     }
   };
 
@@ -505,6 +553,7 @@ const RiddleGame = () => {
         name: newPlayer.name,
         avatar: newPlayer.avatar,
         score: 0,
+        attempts: 0,
         isAI: newPlayer.isAI
       });
       setShowNewPlayerDialog(true);
@@ -514,6 +563,7 @@ const RiddleGame = () => {
         name: newPlayer.name,
         avatar: newPlayer.avatar,
         score: 0,
+        attempts: 0,
         isAI: newPlayer.isAI
       }]);
     }
@@ -544,13 +594,15 @@ const RiddleGame = () => {
     const playerId = selectedChild?.id ?? 'player1';
     const scoreIncrement = isCorrect ? 1 : 0; // adjust scoring rule if needed
 
-    // Update local score (only once) and ref immediately
-    setPlayersSafe(prev => prev.map(p => p.id === playerId ? { ...p, score: p.score + scoreIncrement } : p));
+    // Update local score (only once) and ref immediately — also increment attempts locally
+    setPlayersSafe(prev => prev.map(p => p.id === playerId ? { ...p, score: p.score + scoreIncrement, attempts: (p.attempts ?? 0) + 1 } : p));
 
     // Persist score if room-based multiplayer (persist only; local update already applied)
     if (currentRoomId) {
       try {
         await updatePlayerScore(playerId, scoreIncrement);
+        // ensure we refresh after persisting so others see this immediately
+        await fetchRoomScores(currentRoomId);
       } catch (err) {
         console.error('updatePlayerScore failed', err);
       }
@@ -588,7 +640,25 @@ const RiddleGame = () => {
             total_questions: currentScore.total_questions + 1
           })
           .eq('room_id', currentRoomId)
-          .eq('child_id', playerId);
+          .eq('player_name', player.name);
+        
+        // refresh local copy after update
+        await fetchRoomScores(currentRoomId);
+      } else {
+        // If row missing, insert a row for this player
+        await supabase
+          .from('multiplayer_game_scores')
+          .insert([{
+            room_id: currentRoomId,
+            child_id: player.isAI ? null : playerId,
+            player_name: player.name,
+            player_avatar: player.avatar,
+            is_ai: player.isAI || false,
+            score: scoreIncrement,
+            total_questions: 1
+          }]);
+        // and refresh
+        await fetchRoomScores(currentRoomId);
       }
     } catch (err) {
       console.error('Failed to persist player score', err);
@@ -606,8 +676,13 @@ const RiddleGame = () => {
     }
   };
 
-  const finishGame = () => {
+  const finishGame = async () => {
     if (gameEndedRef.current) return; // idempotent
+
+    // attempt to sync final DB scores before snapshotting
+    if (currentRoomId) {
+      try { await fetchRoomScores(currentRoomId); } catch (e) { /* ignore */ }
+    }
 
     // compute and store a final snapshot before switching to complete phase
     const finalPlayers = (playersRef.current && playersRef.current.length) ? playersRef.current : players;
@@ -739,6 +814,25 @@ const RiddleGame = () => {
 
     return () => { supabase.removeChannel(channel); };
   }, [roomCode]);
+
+  // Sync multiplayer scores in realtime so everyone sees updated scores as answers are recorded
+  useEffect(() => {
+    if (!currentRoomId) return;
+
+    const channel = supabase
+      .channel(`multiplayer-scores-${currentRoomId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'multiplayer_game_scores', filter: `room_id=eq.${currentRoomId}` },
+        (payload) => {
+          // whenever a DB change happens, refresh the scores list from DB to keep everyone in sync
+          fetchRoomScores(currentRoomId).catch((e) => { /* ignore */ });
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [currentRoomId]);
 
   // Host explicit start handler: persist 'playing' status and kick off countdown
   const startGameAsHost = async () => {
@@ -878,32 +972,95 @@ const RiddleGame = () => {
     if (percentage >= 80) starsEarned = 3;
     else if (percentage >= 60) starsEarned = 2;
 
+    // Determine winners/losers
     const sortedPlayers = [...finalPlayers].sort((a, b) => b.score - a.score);
+    const highestScore = sortedPlayers.length ? sortedPlayers[0].score : 0;
+    const lowestScore = sortedPlayers.length ? sortedPlayers[sortedPlayers.length - 1].score : 0;
+    const winners = sortedPlayers.filter(p => p.score === highestScore);
+    const losers = sortedPlayers.filter(p => p.score === lowestScore);
+
+    // friendly feedback for the current player
+    const currentPlayerId = selectedChild?.id || 'player1';
+    const amIWinner = winners.some(w => w.id === currentPlayerId);
+    const amILoser = losers.some(l => l.id === currentPlayerId);
+    let personalFeedback = 'Great effort!';
+    if (amIWinner) {
+      personalFeedback = winners.length === 1 ? 'You are the Winner! 🎉 Excellent work!' : 'You tied for 1st place! 🥳';
+    } else if (amILoser) {
+      personalFeedback = 'Oops — last place this time. Try again to improve! 💪';
+    } else {
+      personalFeedback = 'Nice job — keep practicing to climb to the top!';
+    }
 
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/20 via-secondary/20 to-accent/20 p-4">
         <Card className="max-w-lg mx-auto bg-white/90 shadow-xl">
           <CardHeader className="text-center">
-            <div className="text-6xl mb-4">🎉</div>
-            <CardTitle className="text-2xl font-fredoka text-primary">
-              Great Job, {selectedChild?.name || 'Player'}!
-            </CardTitle>
-          </CardHeader>
+            {amILoser ? (
+              <>
+                <div className="text-6xl mb-4">😢</div>
+                <CardTitle className="text-2xl font-fredoka text-primary">
+                  Better luck next time, {selectedChild?.name || 'Player'}.
+                </CardTitle>
+              </>
+            ) : (
+              <>
+                <div className="text-6xl mb-4">🎉</div>
+                <CardTitle className="text-2xl font-fredoka text-primary">
+                  Great Job, {selectedChild?.name || 'Player'}!
+                </CardTitle>
+              </>
+            )}
+             {/* Personal feedback banner */}
+             <div className="mt-2">
+               <div className={`inline-block px-3 py-1 rounded-full text-sm ${
+                 amIWinner ? 'bg-green-100 text-green-800' : amILoser ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-50 text-blue-800'
+               }`}>
+                 {personalFeedback}
+               </div>
+ 
+               {/* NEW: If player finished last, show a friendly participation badge CTA */}
+               {amILoser && (
+                 <div className="mt-2 flex items-center justify-center space-x-2">
+                   <div className="text-lg">🏅</div>
+                   <div className="text-sm text-yellow-800">
+                     You earned a Participation Badge — keep practicing to level up!
+                   </div>
+                 </div>
+               )}
+             </div>
+           </CardHeader>
           <CardContent className="space-y-6 text-center">
             <div className="space-y-4">
               <p className="text-lg text-muted-foreground">Final Scoreboard:</p>
-              {sortedPlayers.map((player, index) => (
-                <div key={player.id} className="flex items-center justify-between bg-secondary/10 rounded-lg p-3">
-                  <div className="flex items-center space-x-3">
-                    <div className="text-xl">{index === 0 ? '👑' : `${index + 1}.`}</div>
-                    <Avatar className="w-8 h-8">
-                      <AvatarFallback className="text-lg">{player.avatar}</AvatarFallback>
-                    </Avatar>
-                    <span className="font-medium text-primary">{player.name}</span>
+              {sortedPlayers.map((player, index) => {
+                const isWinner = player.score === highestScore;
+                const isLoser = player.score === lowestScore;
+                return (
+                  <div
+                    key={player.id}
+                    className={`flex items-center justify-between rounded-lg p-3 transition-all ${
+                      isWinner ? 'bg-green-50 border-2 border-green-200' : isLoser ? 'bg-red-50 border border-red-100' : 'bg-secondary/10'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-3">
+                      <div className="text-xl">{isWinner ? '👑' : `${index + 1}.`}</div>
+                      <Avatar className="w-8 h-8">
+                        <AvatarFallback className="text-lg">{player.avatar}</AvatarFallback>
+                      </Avatar>
+                      <div className="text-left">
+                        <div className="font-medium text-primary">{player.name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {player.attempts ?? 0} attempted
+                          {isWinner && <span className="ml-2 text-sm text-green-700">Winner</span>}
+                          {isLoser && <span className="ml-2 text-sm text-red-700">Needs practice</span>}
+                        </div>
+                      </div>
+                    </div>
+                    <span className="text-xl font-bold text-primary">{player.score}</span>
                   </div>
-                  <span className="text-xl font-bold text-primary">{player.score}</span>
-                </div>
-              ))}
+                );
+              })}
 
               <div className="flex justify-center mt-4">
                 {Array.from({ length: 3 }, (_, i) => (
@@ -1007,7 +1164,7 @@ const RiddleGame = () => {
         </Card>
       </div>
 
-      {/* Scoreboard Panel (visible during play: names/avatars shown, scores hidden) */}
+      {/* Scoreboard Panel (visible during play: names/avatars shown, show attempts realtime) */}
       <div className="fixed top-20 right-4 z-50 w-72">
         <Card className="bg-white/95 shadow-lg">
           <CardHeader className="py-2 px-3">
@@ -1015,7 +1172,7 @@ const RiddleGame = () => {
           </CardHeader>
           <CardContent className="py-2 px-3">
             <div className="space-y-2 max-h-64 overflow-auto">
-              {[...players].sort((a, b) => b.score - a.score).map((player, idx) => (
+              {[...players].sort((a, b) => (b.attempts ?? 0) - (a.attempts ?? 0)).map((player, idx) => (
                 <div key={player.id} className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
                     <Avatar className="w-6 h-6">
@@ -1023,8 +1180,12 @@ const RiddleGame = () => {
                     </Avatar>
                     <span className="text-sm truncate">{idx === 0 ? `👑 ${player.name}` : player.name}</span>
                   </div>
+                  {/* Show live attempts for each player during play */}
+                  <div className="text-sm font-semibold text-primary">
+                    {player.attempts ?? 0} attempted
+                  </div>
                 </div>
-              ))}
+              ))} 
             </div>
           </CardContent>
         </Card>
@@ -1157,5 +1318,3 @@ const RiddleGame = () => {
 };
 
 export default RiddleGame;
-
-//Original code till now without any issue
